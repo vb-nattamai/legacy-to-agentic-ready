@@ -34,19 +34,47 @@ When you run the transformer on your repository, it produces:
 
 ---
 
+## Requirements
+
+- **Python 3.9+**
+- **pip** (or your preferred package manager)
+- **(Optional)** Anthropic, OpenAI, or Google API key for LLM-enhanced generation
+
+```bash
+# Required
+python --version  # Should be 3.9 or higher
+
+# Optional — install for LLM-enhanced generation
+pip install anthropic>=0.40.0
+
+# Set API keys (optional)
+export ANTHROPIC_API_KEY="sk-ant-..."   # For Claude
+export OPENAI_API_KEY="sk-..."          # For OpenAI
+export GOOGLE_API_KEY="..."             # For Gemini
+```
+
+---
+
 ## Quick Start
 
 ### 1. Clone this toolkit
 
 ```bash
-git clone https://github.com/YOUR_ORG/legacy-to-agentic-ready.git
+git clone https://github.com/vb-nattamai/legacy-to-agentic-ready.git
 cd legacy-to-agentic-ready
 ```
 
 ### 2. Run the transformer against your target repo
 
 ```bash
+# Basic usage (static analysis only)
 python scripts/run_transformer.py --target /path/to/your/repo
+
+# With LLM enhancement (if API key is set)
+python scripts/run_transformer.py --target /path/to/your/repo --provider anthropic
+
+# Preview without writing files
+python scripts/run_transformer.py --target /path/to/your/repo --dry-run
 ```
 
 ### 3. Review and commit the generated files
@@ -57,6 +85,18 @@ The transformer will:
 3. **Create** a machine-readable context map (`agent-context.json`)
 4. **Scaffold** tool templates matching your repo's languages
 5. **Output** all files into your target repo (no existing files are modified)
+
+```bash
+# Review changes
+git status
+
+# Commit
+git add -A
+git commit -m "feat: Add AI-agent-ready scaffolding"
+
+# Push
+git push origin main
+```
 
 ---
 
