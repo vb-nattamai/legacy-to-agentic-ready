@@ -1,91 +1,41 @@
 {
-  "$schema": "https://raw.githubusercontent.com/legacy-to-agentic-ready/main/schemas/agent-context.schema.json",
-  "_generated_by": "legacy-to-agentic-ready",
-  "_generated_at": "{{TIMESTAMP}}",
-  "_version": "1.0.0",
-
-  "project_name": "{{PROJECT_NAME}}",
-  "description": "{{PROJECT_DESCRIPTION}}",
-
-  "primary_languages": [
-    "{{LANGUAGE_1}}",
-    "{{LANGUAGE_2}}"
-  ],
-
-  "frameworks": [
-    "{{FRAMEWORK_1}}"
-  ],
-
-  "build_system": "{{BUILD_SYSTEM}}",
-
-  "entry_points": [
-    "{{ENTRY_POINT_1}}",
-    "{{ENTRY_POINT_2}}"
-  ],
-
-  "test_framework": "{{TEST_FRAMEWORK}}",
-  "test_directory": "{{TEST_DIRECTORY}}",
-
-  "source_directories": [
-    "{{SOURCE_DIR_1}}",
-    "{{SOURCE_DIR_2}}"
-  ],
-
-  "key_files": {
-    "{{KEY_FILE_PATH_1}}": "{{KEY_FILE_DESCRIPTION_1}}",
-    "{{KEY_FILE_PATH_2}}": "{{KEY_FILE_DESCRIPTION_2}}",
-    "{{KEY_FILE_PATH_3}}": "{{KEY_FILE_DESCRIPTION_3}}"
-  },
-
-  "api_endpoints": [
-    {
-      "method": "{{HTTP_METHOD}}",
-      "path": "{{API_PATH}}",
-      "description": "{{API_DESCRIPTION}}",
-      "handler": "{{HANDLER_FILE_PATH}}"
-    }
-  ],
-
-  "conventions": {
-    "naming": "{{NAMING_CONVENTION}}",
-    "structure": "{{PROJECT_STRUCTURE}}",
-    "branch_strategy": "{{BRANCH_STRATEGY}}",
-    "commit_format": "{{COMMIT_FORMAT}}"
-  },
-
-  "commands": {
-    "install": "{{INSTALL_COMMAND}}",
-    "build": "{{BUILD_COMMAND}}",
-    "test": "{{TEST_COMMAND}}",
-    "lint": "{{LINT_COMMAND}}",
-    "format": "{{FORMAT_COMMAND}}",
-    "run": "{{RUN_COMMAND}}",
-    "deploy": "{{DEPLOY_COMMAND}}"
-  },
-
-  "environment": {
-    "required_env_vars": [
-      "{{ENV_VAR_1}}",
-      "{{ENV_VAR_2}}"
+  "static": {
+    "_comment": "These fields are set once. Edit manually. Never overwritten by the transformer.",
+    "repo_name": "{{PROJECT_NAME}}",
+    "primary_language": "{{LANGUAGE_1}}",
+    "language_version": "{{BUILD_SYSTEM}}",
+    "frameworks": [
+      "{{FRAMEWORK_1}}"
     ],
-    "env_file": "{{ENV_FILE_PATH}}",
-    "min_runtime_versions": {
-      "{{RUNTIME}}": "{{MIN_VERSION}}"
+    "entry_point": "{{ENTRY_POINT_1}}",
+    "api_protocol": "REST",
+    "restricted_write_paths": [
+      "config/",
+      "build/"
+    ],
+    "environment_variables": {
+      "{{ENV_VAR_1}}": "Description of env var",
+      "{{ENV_VAR_2}}": "Another env var"
     }
   },
-
-  "ci_cd": {
-    "platform": "{{CI_PLATFORM}}",
-    "config_file": "{{CI_CONFIG_PATH}}",
-    "pipeline_stages": [
-      "{{STAGE_1}}",
-      "{{STAGE_2}}"
-    ]
-  },
-
-  "documentation": {
-    "readme": "README.md",
-    "docs_directory": "{{DOCS_DIR}}",
-    "api_docs": "{{API_DOCS_PATH}}"
+  "dynamic": {
+    "_comment": "These fields are refreshed automatically on every scan.",
+    "last_scanned": "{{TIMESTAMP}}",
+    "module_layout": {
+      "{{SOURCE_DIR_1}}/": "Source code",
+      "{{TEST_DIRECTORY}}/": "Test code"
+    },
+    "domain_concepts": [
+      "{{DOMAIN_CONCEPT_1}}",
+      "{{DOMAIN_CONCEPT_2}}"
+    ],
+    "agent_capabilities": [
+      "code_analysis",
+      "testing",
+      "building"
+    ],
+    "test_command": "{{TEST_COMMAND}}",
+    "build_command": "{{BUILD_COMMAND}}",
+    "lint_command": ""
   }
 }

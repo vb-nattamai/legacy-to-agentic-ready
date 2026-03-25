@@ -1,0 +1,100 @@
+name: Refresh agent context (Gitea)
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # Every Monday at 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: gitea.com/actions/checkout@v4
+
+      - name: Check out agentic toolkit
+        run: |
+          git clone -b main --depth 1 \
+            ${{ gitea.server }}/vb-nattamai/legacy-to-agentic-ready .agentic-toolkit
+
+      - name: Set up Python 3.11
+        uses: gitea.com/actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Run context-only refresh
+        run: |
+          python .agentic-toolkit/scripts/run_transformer.py \
+            --target . --only context --force --quiet
+
+      - name: Check for drift
+        id: drift
+        run: |
+          if git diff --quiet agent-context.json; then
+            echo "drifted=false" >> $GITHUB_OUTPUT
+          else
+            echo "drifted=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Open drift PR
+        if: steps.drift.outputs.drifted == 'true'
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          git config user.name "agentic-ready-bot"
+          git config user.email "agentic-ready@gitea.local"
+          BRANCH="agentic-ready/context-refresh-$(date +%Y%m%d-%H%M%S)"
+          REPO_FULLNAME="${{ gitea.repository }}"
+          API_BASE="${{ gitea.server }}/api/v1"
+          
+          git checkout -b "$BRANCH"
+          git add agent-context.json
+          git commit -m "chore: refresh agent-context.json [skip ci]"
+          git push origin "$BRANCH"
+          
+          BODY=$(cat <<'EOF'
+## 🤖 Agent Context Drift Detected
+
+The scheduled context refresh found that `agent-context.json` no longer
+matches the current state of the repository.
+
+This can happen when:
+- New modules, services, or packages were added
+- Entry points or build commands changed
+- New environment variables were introduced
+
+### What changed
+See the diff in this PR for the exact changes.
+
+### Before merging
+- [ ] Verify `domain_concepts` still reflects real terms from the codebase
+- [ ] Verify `restricted_write_paths` is still accurate
+- [ ] Verify `environment_variables` covers all new vars introduced since last scan
+EOF
+          )
+          
+          # Create label if needed
+          curl -s -X POST "$API_BASE/repos/$REPO_FULLNAME/labels" \
+            -H "Authorization: token $GITEA_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "agentic-ready",
+              "color": "4CAF50"
+            }' 2>/dev/null || true
+          
+          # Create PR
+          curl -s -X POST "$API_BASE/repos/$REPO_FULLNAME/pulls" \
+            -H "Authorization: token $GITEA_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"title\": \"🤖 Agent context drift detected — refresh required\",
+              \"body\": $(echo \"$BODY\" | jq -Rs .),
+              \"head\": \"$BRANCH\",
+              \"base\": \"main\",
+              \"labels\": [\"agentic-ready\"]
+            }" | jq .
+
+      - name: No drift
+        if: steps.drift.outputs.drifted == 'false'
+        run: echo "✅ agent-context.json is up to date. No PR needed."

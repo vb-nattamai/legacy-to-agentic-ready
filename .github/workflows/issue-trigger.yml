@@ -110,17 +110,32 @@ jobs:
           
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
 
+      - name: Check actor is a repo collaborator
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor
+            });
+            const allowed = ['admin', 'write', 'maintain'];
+            if (!allowed.includes(perm.permission)) {
+              core.setFailed(`@${context.actor} does not have write access. Transformation skipped.`);
+            }
+
       - name: Comment on issue
         if: steps.transform.outputs.generated == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ steps.pr.outputs.pr_url }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} --body "🤖 **Agentic Ready Transformation Started**
+          BODY_TEXT=$(cat <<'EOF'
+🤖 **Agentic Ready Transformation Started**
 
 I've analysed this repository and generated all AI agent scaffolding files.
 
-**Pull Request:** $PR_URL
+**Pull Request:** ${{ steps.pr.outputs.pr_url }}
 
 **What was generated:**
 - 📝 **CLAUDE.md** — Claude Code context
@@ -132,7 +147,9 @@ I've analysed this repository and generated all AI agent scaffolding files.
 - 📚 **memory/schema.md** — Memory schema
 
 Review the PR, adjust any placeholder values, and merge when ready.
-"
+EOF
+          )
+          gh issue comment ${{ github.event.issue.number }} --body "$BODY_TEXT"
 
       - name: Add success label
         if: steps.transform.outputs.generated == 'true'
@@ -148,8 +165,11 @@ Review the PR, adjust any placeholder values, and merge when ready.
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create agentic-ready-failed -c "f44336" -d "Agentic ready transformation failed" 2>/dev/null || true
-          gh issue comment ${{ github.event.issue.number }} --body "❌ **Agentic Ready Transformation Failed**
+          FAILURE_TEXT=$(cat <<'EOF'
+❌ **Agentic Ready Transformation Failed**
 
 The transformer encountered an error. Please check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
-"
+EOF
+          )
+          gh issue comment ${{ github.event.issue.number }} --body "$FAILURE_TEXT"
           gh issue edit ${{ github.event.issue.number }} --add-label "agentic-ready-failed"

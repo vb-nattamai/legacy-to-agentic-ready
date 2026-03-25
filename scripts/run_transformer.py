@@ -415,13 +415,48 @@ class AgenticGenerator:
         return result
 
     def _generate_context_json(self) -> None:
-        """Generate agent-context.json."""
-        context = {
-            "_generated_by": "legacy-to-agentic-ready",
-            "_generated_at": datetime.now(timezone.utc).isoformat(),
-            "_version": "1.0.0",
-            **self.meta,
+        """Generate agent-context.json with static/dynamic split. (FIX 5)"""
+        context_file = self.target / "agent-context.json"
+        
+        # Prepare static section (set once, rarely changes)
+        static_section = {
+            "_comment": "These fields are set once. Edit manually. Never overwritten by the transformer.",
+            "repo_name": self.meta.get("project_name", "Project"),
+            "primary_language": self.meta.get("primary_languages", ["Unknown"])[0],
+            "language_version": self.meta.get("build_system", "unknown"),
+            "frameworks": self.meta.get("frameworks", []),
+            "entry_point": self.meta.get("entry_points", [""])[0] if self.meta.get("entry_points") else "",
+            "api_protocol": "REST",
+            "restricted_write_paths": [],
+            "environment_variables": {var: "<description>" for var in self.meta.get("environment_variables", [])},
         }
+        
+        # Prepare dynamic section (refreshed on every scan)
+        dynamic_section = {
+            "_comment": "These fields are refreshed automatically on every scan.",
+            "last_scanned": datetime.now(timezone.utc).isoformat(),
+            "module_layout": {"src/": "Source code", "tests/": "Test code"},
+            "domain_concepts": [],
+            "agent_capabilities": ["code_analysis", "testing", "building"],
+            "test_command": self.meta.get("commands", {}).get("test", "unknown"),
+            "build_command": self.meta.get("commands", {}).get("build", "unknown"),
+            "lint_command": "",
+        }
+        
+        # If file exists, preserve static section
+        if context_file.exists():
+            try:
+                existing = json.loads(context_file.read_text())
+                if "static" in existing:
+                    static_section.update(existing.get("static", {}))
+            except json.JSONDecodeError:
+                pass
+        
+        context = {
+            "static": static_section,
+            "dynamic": dynamic_section,
+        }
+        
         content = json.dumps(context, indent=2, ensure_ascii=False)
         self._write_file("agent-context.json", content)
 
@@ -503,6 +538,185 @@ class AgenticGenerator:
 
 
 # ============================================================================
+# Pre-commit Hook Management
+# ============================================================================
+
+def install_hooks(target_path: Path) -> None:
+    """Install pre-commit hook for automatic context refresh. (FIX 2)"""
+    git_hooks_dir = target_path / ".git" / "hooks"
+    hook_path = git_hooks_dir / "pre-commit"
+    
+    hook_content = '''#!/bin/sh
+# Installed by legacy-to-agentic-ready — keeps agent-context.json fresh.
+# Re-scans only if source files changed. Fails commit if context is stale.
+
+CHANGED=$(git diff --cached --name-only | grep -E '\\.(py|ts|js|java|go|rs|cs|rb)$')
+if [ -z "$CHANGED" ]; then
+  exit 0
+fi
+
+TOOLKIT=$(git config --get agentic.toolkit-path)
+if [ -z "$TOOLKIT" ]; then
+  echo "[agentic-ready] Skipping context refresh — agentic.toolkit-path not set."
+  echo "  Run: git config agentic.toolkit-path /path/to/legacy-to-agentic-ready"
+  exit 0
+fi
+
+echo "[agentic-ready] Source files changed — refreshing agent-context.json..."
+python "$TOOLKIT/scripts/run_transformer.py" --target . --only context --force --quiet
+
+if ! git diff --quiet agent-context.json; then
+  git add agent-context.json
+  echo "[agentic-ready] agent-context.json updated and staged."
+fi
+'''
+    
+    hook_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    if hook_path.exists() and not hook_path.read_text().find("legacy-to-agentic-ready") >= 0:
+        print(f"⚠️  A pre-commit hook already exists at {hook_path}.")
+        print("To install manually, append the contents of:")
+        print("scripts/pre-commit-snippet.sh")
+        return
+    
+    hook_path.write_text(hook_content, encoding="utf-8")
+    os.chmod(hook_path, 0o755)
+    
+    print(f"✅ Pre-commit hook installed in {hook_path}")
+    print("To enable context refresh, run:")
+    print("git config agentic.toolkit-path /absolute/path/to/legacy-to-agentic-ready")
+
+
+# ============================================================================
+# Context Verification
+# ============================================================================
+
+def verify(target_path: Path) -> None:
+    """Verify generated context with LLM. (FIX 4)"""
+    context_file = target_path / "agent-context.json"
+    claude_file = target_path / "CLAUDE.md"
+    
+    if not context_file.exists():
+        print("⚠️  agent-context.json not found. Skipping verification.")
+        return
+    
+    try:
+        context_json = json.loads(context_file.read_text())
+    except json.JSONDecodeError:
+        print("❌ agent-context.json is malformed JSON")
+        return
+    
+    claude_md = claude_file.read_text() if claude_file.exists() else ""
+    
+    # Try to use Anthropic API if available
+    try:
+        import anthropic
+        
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        prompt = f"""Given the following agent-context.json and CLAUDE.md from a software repository,
+answer these three questions in valid JSON only, no other text:
+{{
+"detected_entry_point": "what is the entry point file?",
+"detected_test_command": "what command runs the tests?",
+"detected_primary_language": "what is the primary language?"
+}}
+
+agent-context.json:
+{json.dumps(context_json, indent=2)}
+
+CLAUDE.md:
+{claude_md}"""
+        
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=256,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        
+        try:
+            response_text = message.content[0].text
+            llm_answers = json.loads(response_text)
+        except (json.JSONDecodeError, IndexError):
+            print("⚠️  LLM response was not valid JSON. Skipping verification.")
+            return
+        
+        # Compare
+        entry_point = context_json.get("entry_points", ["<unknown>"])[0] if context_json.get("entry_points") else "<unknown>"
+        test_cmd = context_json.get("commands", {}).get("test", "<unknown>")
+        lang = context_json.get("primary_languages", ["<unknown>"])[0] if context_json.get("primary_languages") else "<unknown>"
+        
+        results = [
+            ("entry_point", entry_point, llm_answers.get("detected_entry_point", "<unknown>")),
+            ("test_command", test_cmd, llm_answers.get("detected_test_command", "<unknown>")),
+            ("primary_language", lang, llm_answers.get("detected_primary_language", "<unknown>")),
+        ]
+        
+        # Print table
+        print()
+        print("┌─────────────────────┬──────────────────────┬──────────────────────┬────────┐")
+        print("│ Field               │ agent-context.json   │ LLM understood       │ Match  │")
+        print("├─────────────────────┼──────────────────────┼──────────────────────┼────────┤")
+        
+        matched = 0
+        for field, actual, understood in results:
+            match = "✅" if str(actual).lower() in str(understood).lower() or str(understood).lower() in str(actual).lower() else "❌"
+            if "✅" in match:
+                matched += 1
+            print(f"│ {field:<19} │ {str(actual)[:20]:<20} │ {str(understood)[:20]:<20} │ {match:<6} │".ljust(80))
+        
+        print("└─────────────────────┴──────────────────────┴──────────────────────┴────────┘")
+        print(f"Verification score: {matched}/3")
+        print()
+        
+        if matched < 2:
+            sys.exit(1)
+    except ImportError:
+        print("⚠️  anthropic package not installed. Skipping LLM verification.")
+
+
+# ============================================================================
+# Agentic Readiness Scoring
+# ============================================================================
+
+def score(target_path: Path) -> dict[str, Any]:
+    """Calculate agentic readiness score. (FIX 6)"""
+    criteria = {
+        "agent-context.json": (10, (target_path / "agent-context.json").exists()),
+        "CLAUDE.md": (10, (target_path / "CLAUDE.md").exists()),
+        "AGENTS.md": (10, (target_path / "AGENTS.md").exists()),
+        "system_prompt.md": (5, (target_path / "agents" / "system_prompt.md").exists()),
+        "tools/ has files": (10, any((target_path / "tools").glob("*"))),
+    }
+    
+    context_file = target_path / "agent-context.json"
+    if context_file.exists():
+        try:
+            ctx = json.loads(context_file.read_text())
+            entry_point = ctx.get("entry_points", [""])[0] if ctx.get("entry_points") else ""
+            criteria["entry_point exists"] = (10, bool(entry_point) and (target_path / entry_point).exists())
+            criteria["test_command set"] = (10, bool(ctx.get("commands", {}).get("test")))
+            criteria["restricted_write_paths"] = (10, len(ctx.get("restricted_write_paths", [])) > 0)
+            criteria["environment_variables"] = (10, len(ctx.get("environment_variables", [])) > 0)
+        except json.JSONDecodeError:
+            pass
+    
+    criteria["domain_concepts ≥3"] = (5, len(context_file.exists() and json.loads(context_file.read_text()).get("domain_concepts", []) or []) >= 3)
+    criteria["OpenAPI spec"] = (5, any(target_path.glob("**/openapi.{yaml,json,yml}")) or any(target_path.glob("**/swagger.{yaml,json,yml}")))
+    criteria["CI config exists"] = (5, any(target_path.glob(".github/workflows/*.yml")) or any(target_path.glob(".gitea/workflows/*.yml")))
+    
+    total = 0
+    table_rows = []
+    for criterion, (points, achieved) in criteria.items():
+        if achieved:
+            total += points
+            table_rows.append((f"✅ {criterion}", f"+{points}"))
+        else:
+            table_rows.append((f"⬜ {criterion}", f"+ 0"))
+    
+    return {"score": total, "max": 100, "rows": table_rows}
+
+
+# ============================================================================
 # CLI
 # ============================================================================
 
@@ -534,6 +748,9 @@ Examples:
         help="LLM provider for enhanced generation",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument("--install-hooks", action="store_true", help="Install pre-commit hook")
+    parser.add_argument("--verify", action="store_true", help="Verify generated context with LLM")
+    parser.add_argument("--quiet", action="store_true", help="Suppress non-essential output")
 
     args = parser.parse_args()
     target = Path(args.target).resolve()
@@ -542,17 +759,29 @@ Examples:
         print(f"❌ Directory not found: {target}")
         sys.exit(1)
 
-    print()
-    print("╔══════════════════════════════════════════════╗")
-    print("║   🤖 Repo-to-Agentic Transformer v1.0.0     ║")
-    print("╚══════════════════════════════════════════════╝")
-    print()
+    # Handle install-hooks flag
+    if args.install_hooks:
+        install_hooks(target)
+        return
+    
+    # Handle verify flag
+    if args.verify:
+        verify(target)
+        return
+
+    if not args.quiet:
+        print()
+        print("╔══════════════════════════════════════════════╗")
+        print("║   🤖 Repo-to-Agentic Transformer v1.0.0     ║")
+        print("╚══════════════════════════════════════════════╝")
+        print()
 
     # Analyze
     analyzer = RepoAnalyzer(target)
     metadata = analyzer.analyze()
 
-    print()
+    if not args.quiet:
+        print()
 
     # Generate
     generator = AgenticGenerator(target, metadata, dry_run=args.dry_run, force=args.force)
@@ -561,22 +790,44 @@ Examples:
     else:
         generated = generator.generate_all()
 
+    # Scoring
+    readiness = score(target)
+    
     # Summary
-    print()
-    print("─" * 50)
-    mode_str = "[DRY RUN] " if args.dry_run else ""
-    print(f"✅ {mode_str}Transformation Complete")
-    print("─" * 50)
-    print(f"  Project:    {metadata['project_name']}")
-    print(f"  Languages:  {', '.join(metadata['primary_languages']) or 'Unknown'}")
-    print(f"  Build:      {metadata['build_system']}")
-    print()
-    print("  Generated Files:")
-    for filepath, status in generated:
-        print(f"    {status} {filepath}")
-    print()
-    print("  No existing files were modified." if not args.force else "  Files updated with --force flag.")
-    print()
+    if not args.quiet:
+        print()
+        print("─" * 50)
+        mode_str = "[DRY RUN] " if args.dry_run else ""
+        print(f"✅ {mode_str}Transformation Complete")
+        print("─" * 50)
+        print(f"  Project:    {metadata['project_name']}")
+        print(f"  Languages:  {', '.join(metadata['primary_languages']) or 'Unknown'}")
+        print(f"  Build:      {metadata['build_system']}")
+        print()
+        print("  Generated Files:")
+        for filepath, status in generated:
+            print(f"    {status} {filepath}")
+        print()
+        print("  No existing files were modified." if not args.force else "  Files updated with --force flag.")
+        print()
+        
+        # Print readiness score
+        print("──────────────────────────────────────")
+        print(f"AGENTIC READINESS SCORE: {readiness['score']} / {readiness['max']}")
+        print("──────────────────────────────────────")
+        for criterion, points in readiness["rows"]:
+            print(f"  {criterion:<40} {points:>3}")
+        if readiness["score"] < 100:
+            print()
+            print("💡 To improve your score:")
+            if not (target / "agent-context.json").exists():
+                print("- Generate agent-context.json (run without --only flag)")
+            if not (target / ".env.example").exists():
+                print("- Add environment_variables to agent-context.json")
+            if not any(target.glob("**/openapi.{yaml,json,yml}")):
+                print("- Add an OpenAPI spec (openapi.yaml) for better tool generation")
+        print("──────────────────────────────────────")
+        print()
 
 
 if __name__ == "__main__":

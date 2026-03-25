@@ -437,6 +437,40 @@ uses: your-gitea-instance.com/vb-nattamai/legacy-to-agentic-ready/.gitea/workflo
 
 ---
 
+## 🔄 Keeping context fresh
+
+`agent-context.json` goes stale when your codebase changes. Three ways to keep it current:
+
+**Pre-commit hook (recommended for local development)**
+```bash
+python scripts/run_transformer.py --target /path/to/your-repo --install-hooks
+git -C /path/to/your-repo config agentic.toolkit-path /path/to/legacy-to-agentic-ready
+```
+Automatically refreshes the dynamic section of `agent-context.json` whenever source files change.
+
+**Weekly CI refresh (recommended for teams)**
+Copy `.github/workflows/context-refresh.yml` into your repo. It runs every Monday, detects drift, and opens a PR if `agent-context.json` needs updating.
+
+**Manual refresh**
+```bash
+python scripts/run_transformer.py --target /path/to/your-repo --only context --force
+```
+
+---
+
+## ✅ Verify your context
+
+After generating or updating, run the verifier to confirm an LLM can correctly read and understand the generated files:
+```bash
+python scripts/run_transformer.py --target /path/to/your-repo --verify
+```
+
+Exit code 0 = context is readable and consistent.
+Exit code 1 = context has gaps — check the output table for which fields failed.
+Use this as a CI gate after any transformation.
+
+---
+
 ## Supported Languages & Frameworks
 
 The transformer auto-detects:

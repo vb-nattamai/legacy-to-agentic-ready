@@ -16,6 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Check actor is a repo collaborator
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          PERM=$(curl -s -H "Authorization: token $GITEA_TOKEN" \
+            "${{ gitea.server }}/api/v1/repos/${{ gitea.repository }}/collaborators/${{ gitea.actor }}" \
+            -o /dev/null -w "%{http_code}")
+          if [ "$PERM" != "204" ]; then
+            echo "Actor ${{ gitea.actor }} is not a collaborator. Skipping."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: gitea.com/actions/checkout@v4
         with:
@@ -136,11 +148,12 @@ jobs:
           ISSUE_NUMBER=${{ github.event.issue.number }}
           PR_URL="${{ steps.pr.outputs.pr_url }}"
           
-          COMMENT_TEXT="🤖 **Agentic Ready Transformation Started**
+          COMMENT_TEXT=$(cat <<'EOF'
+🤖 **Agentic Ready Transformation Started**
 
 I've analysed this repository and generated all AI agent scaffolding files.
 
-**Pull Request:** $PR_URL
+**Pull Request:** ${{ steps.pr.outputs.pr_url }}
 
 **What was generated:**
 - 📝 **CLAUDE.md** — Claude Code context
@@ -151,7 +164,9 @@ I've analysed this repository and generated all AI agent scaffolding files.
 - 🛠️  **tools/** — Tool scaffolds for detected language(s)
 - 📚 **memory/schema.md** — Memory schema
 
-Review the PR, adjust any placeholder values, and merge when ready."
+Review the PR, adjust any placeholder values, and merge when ready.
+EOF
+          )
           
           curl -s -X POST "$API_BASE/repos/$REPO_FULLNAME/issues/$ISSUE_NUMBER/comments" \
             -H "Authorization: token $GITEA_TOKEN" \
@@ -206,9 +221,12 @@ Review the PR, adjust any placeholder values, and merge when ready."
             }' 2>/dev/null || true
           
           # Comment on issue
-          FAILURE_TEXT="❌ **Agentic Ready Transformation Failed**
+          FAILURE_TEXT=$(cat <<'EOF'
+❌ **Agentic Ready Transformation Failed**
 
-The transformer encountered an error. Please check the [workflow run]($WORKFLOW_URL) for details."
+The transformer encountered an error. Please check the [workflow run](${{ gitea.server }}/${{ gitea.repository }}/actions/runs/${{ github.run_id }}) for details.
+EOF
+          )
           
           curl -s -X POST "$API_BASE/repos/$REPO_FULLNAME/issues/$ISSUE_NUMBER/comments" \
             -H "Authorization: token $GITEA_TOKEN" \
