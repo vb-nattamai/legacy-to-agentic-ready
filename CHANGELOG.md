@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-03-25
+
+
+### Fixed
+
+- context-refresh now reusable via workflow_call, install-to-repo pushes both workflows, README clarifies LLM usage and workflow purposes
+
+### Changed
+
+- docs: add Workflows section describing all 5 workflows + update repo structure tree
+
+---
 ## [1.1.0] — 2026-03-25
 
 ### Added
