@@ -1,5 +1,5 @@
 # 🤖 AgentReady
-### `legacy-to-agentic-ready`
+### `agent-ready`
 
 **A toolkit you drop onto any existing repository to generate all scaffolding files that make it understandable and operable by AI agents — without hallucinations, without invented paths, without breaking existing code.**
 
