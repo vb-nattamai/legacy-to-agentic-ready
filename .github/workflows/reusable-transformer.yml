@@ -18,6 +18,11 @@ on:
         required: false
         default: false
         type: boolean
+      issue_number:
+        description: 'Issue number that triggered this run (for auto-close)'
+        required: false
+        default: ''
+        type: string
     secrets:
       ANTHROPIC_API_KEY:
         description: 'Optional Anthropic API key for LLM-enhanced generation'
@@ -142,3 +147,17 @@ jobs:
         run: |
           echo "✅ Transformation Complete"
           echo "PR: ${{ steps.pr.outputs.pr_url }}"
+
+      - name: Close triggering issue
+        if: inputs.issue_number != ''
+        run: |
+          PR_URL="${{ steps.pr.outputs.pr_url }}"
+          ISSUE="${{ inputs.issue_number }}"
+          if [ -n "$PR_URL" ]; then
+            gh issue comment "$ISSUE" --body "✅ Transformation complete! PR opened: $PR_URL\n\nReview and merge to add the agentic scaffolding to this repo."
+          else
+            gh issue comment "$ISSUE" --body "ℹ️ Repository is already up to date — no new files to generate."
+          fi
+          gh issue close "$ISSUE" --reason completed
+        env:
+          GH_TOKEN: ${{ github.token }}

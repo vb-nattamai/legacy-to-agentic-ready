@@ -12,4 +12,6 @@ jobs:
       pull-requests: write
       issues: write
     uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
+    with:
+      issue_number: ${{ github.event.issue.number }}
     secrets: inherit

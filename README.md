@@ -550,6 +550,8 @@ jobs:
       pull-requests: write
       issues: write
     uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
+    with:
+      issue_number: ${{ github.event.issue.number }}
     secrets: inherit
 ```
 
@@ -578,7 +580,8 @@ Issue opened
     ├─ 3. Runs scanner: detects language, frameworks, build system, entry point
     ├─ 4. Generates all agentic scaffolding files (see list below)
     ├─ 5. Opens a PR titled "🤖 Add agentic-ready scaffolding"
-    └─ 6. Comments on your issue with a link to the PR
+    ├─ 6. Comments on your issue with a link to the PR
+    └─ 7. Closes the issue automatically ✅
 ```
 
 **Step 4: Review and merge the PR**
@@ -598,6 +601,28 @@ The PR contains:
 Review each file, fill in any `<placeholder>` values, then merge.
 
 > **Tip:** The `static` section of `agent-context.json` is for your manual edits. The `dynamic` section is automatically refreshed. Edit `static` before merging.
+
+**Step 5: Improve the readiness score (optional but recommended)**
+
+The first run will score around **40–50 / 100**. This is expected — the transformer generates the file structure automatically but cannot guess your domain-specific details.
+
+To reach 80–100, open `agent-context.json` in the PR and fill in the `static` section:
+
+```json
+"static": {
+  "entry_point": "src/main/java/com/example/Application.java",
+  "test_command": "mvn test",
+  "restricted_write_paths": ["src/main/resources/application.properties"],
+  "environment_variables": ["DATABASE_URL", "API_KEY", "PORT"],
+  "domain_concepts": [
+    "Frame: single bowling turn (2 rolls max)",
+    "Strike: all 10 pins on first roll",
+    "Spare: all 10 pins across 2 rolls"
+  ]
+}
+```
+
+Re-run the transformer after merging to see the updated score in `AGENTIC_READINESS.md`.
 
 ---
 
@@ -786,49 +811,71 @@ uses: your-gitea.com/vb-nattamai/agent-ready/.gitea/workflows/reusable-transform
 ---
 
 
-## � Agentic Readiness Score
+## 🏆 Agentic Readiness Score
 
 Every run outputs a **100-point readiness score** based on:
 
-| Criterion | Points |
-|-----------|--------|
-| `agent-context.json` exists | 10 |
-| `CLAUDE.md` exists | 10 |
-| `AGENTS.md` exists | 10 |
-| `agents/system_prompt.md` exists | 5 |
-| `tools/` has ≥1 file | 10 |
-| Entry point file actually exists | 10 |
-| Test command is non-empty | 10 |
-| `restricted_write_paths` populated | 10 |
-| `environment_variables` populated | 10 |
-| `domain_concepts` has ≥3 entries | 5 |
-| OpenAPI spec exists | 5 |
-| CI config exists (.github/workflows/) | 5 |
+| Criterion | Points | How to get it |
+|-----------|--------|---------------|
+| `agent-context.json` exists | 10 | Auto-generated |
+| `CLAUDE.md` exists | 10 | Auto-generated |
+| `AGENTS.md` exists | 10 | Auto-generated |
+| `system_prompt.md` exists | 5 | Auto-generated |
+| `tools/` has ≥1 file | 10 | Auto-generated |
+| Entry point file exists | 10 | Fill `static.entry_point` in `agent-context.json` |
+| Test command set | 10 | Fill `static.test_command` |
+| `restricted_write_paths` populated | 10 | Fill `static.restricted_write_paths` |
+| `environment_variables` populated | 10 | Fill `static.environment_variables` |
+| `domain_concepts` has ≥3 entries | 5 | Fill `static.domain_concepts` |
+| OpenAPI spec exists | 5 | Add `openapi.yaml` to your repo |
+| CI config exists | 5 | Auto-detected |
 
-**Example output:**
+**Why does the first run score ~40–50?**
+
+The transformer can auto-generate the file structure but cannot read your mind — domain-specific values like `entry_point`, `test_command`, and `domain_concepts` are left as `<placeholder>` for you to fill in. This is intentional: the score gives you an actionable to-do list, not a failing grade.
+
+**First run (typical):**
+```
+──────────────────────────────────────
+  AGENTIC READINESS SCORE: 45 / 100
+──────────────────────────────────────
+  ✅ agent-context.json               +10
+  ✅ CLAUDE.md                        +10
+  ✅ AGENTS.md                        +10
+  ⬜ system_prompt.md                  +0   ← not yet generated
+  ✅ tools/ has files                 +10
+  ⬜ entry_point exists                +0   ← fill in agent-context.json
+  ⬜ test_command set                  +0   ← fill in agent-context.json
+  ⬜ restricted_write_paths            +0   ← fill in agent-context.json
+  ⬜ environment_variables             +0   ← fill in agent-context.json
+  ⬜ domain_concepts ≥3               +0   ← fill in agent-context.json
+  ⬜ OpenAPI spec                      +0
+  ✅ CI config exists                  +5
+```
+
+**After filling in `agent-context.json` static section:**
 ```
 ──────────────────────────────────────
   AGENTIC READINESS SCORE: 95 / 100
 ──────────────────────────────────────
-  ✅ agent-context.json exists        +10
-  ✅ CLAUDE.md exists                 +10
-  ✅ AGENTS.md exists                 +10
-  ✅ agents/system_prompt.md exists   +5
+  ✅ agent-context.json               +10
+  ✅ CLAUDE.md                        +10
+  ✅ AGENTS.md                        +10
+  ✅ system_prompt.md                  +5
   ✅ tools/ has files                 +10
-  ✅ Entry point exists               +10
-  ✅ Test command set                 +10
-  ✅ restricted_write_paths set       +10
-  ✅ environment_variables set        +10
-  ✅ domain_concepts populated        +5
-  ⚠️  OpenAPI spec missing            +0
-  ✅ CI config exists                 +5
+  ✅ entry_point exists               +10
+  ✅ test_command set                 +10
+  ✅ restricted_write_paths           +10
+  ✅ environment_variables            +10
+  ✅ domain_concepts ≥3               +5
+  ⬜ OpenAPI spec                      +0   ← optional
+  ✅ CI config exists                  +5
   ─────────────────────────────────────
-  💡 To improve your score:
-     - Add OpenAPI/Swagger spec for API documentation
+  💡 Add openapi.yaml to reach 100/100
 ──────────────────────────────────────
 ```
 
-Use this to drive adoption — teams want high scores!
+Use this score to drive adoption — set a team standard (e.g. "merge requires score ≥ 80").
 
 ---
 
