@@ -67,6 +67,10 @@ jobs:
           if [ -f .agentic-toolkit/requirements.txt ]; then
             pip install -q anthropic || echo "⚠️  anthropic not available, using static mode"
           fi
+          # Install agent-ready in development mode so the shim can import it
+          cd .agentic-toolkit
+          pip install -e . -q
+          cd ..
 
       - name: Configure git
         run: |
