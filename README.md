@@ -64,8 +64,8 @@ export GOOGLE_API_KEY="..."             # For Gemini
 ### 1. Clone this toolkit
 
 ```bash
-git clone https://github.com/vb-nattamai/legacy-to-agentic-ready.git
-cd legacy-to-agentic-ready
+git clone https://github.com/vb-nattamai/agent-ready.git
+cd agent-ready
 ```
 
 ### 2. Run the transformer against your target repo
@@ -107,7 +107,7 @@ git push origin main
 ## Repository Structure
 
 ```
-legacy-to-agentic-ready/
+agent-ready/
 ├── README.md                          # This file
 ├── LICENSE                            # MIT License
 ├── .github/
@@ -191,7 +191,7 @@ Exit code 0 = context is valid. Use as a CI gate.
 python scripts/run_transformer.py --target /path/to/repo --install-hooks
 
 # Specify where the toolkit lives (for hook to find it)
-git -C /path/to/repo config agentic.toolkit-path /path/to/legacy-to-agentic-ready
+git -C /path/to/repo config agentic.toolkit-path /path/to/agent-ready
 ```
 
 After this, whenever `.py`, `.ts`, `.js`, `.java`, `.go` files change:
@@ -225,7 +225,7 @@ Copy `.github/agents/agentic-readiness-transformer.md` into your repo and let yo
 
 ```bash
 cd ~/projects/bowling-kata
-python ~/legacy-to-agentic-ready/scripts/run_transformer.py --target .
+python ~/agent-ready/scripts/run_transformer.py --target .
 ```
 
 **Output:**
@@ -342,7 +342,7 @@ Now when you use Claude Code, GitHub Copilot, or any AI agent on this repo, they
 
 ```bash
 # Only generate agent instructions, not tool templates
-python ~/legacy-to-agentic-ready/scripts/run_transformer.py --target /path/to/fastapi-app --only agents
+python ~/agent-ready/scripts/run_transformer.py --target /path/to/fastapi-app --only agents
 ```
 
 Output:
@@ -363,7 +363,7 @@ Output:
 ### Example 3: Dry-run (preview without writing)
 
 ```bash
-python ~/legacy-to-agentic-ready/scripts/run_transformer.py --target /path/to/myrepo --dry-run
+python ~/agent-ready/scripts/run_transformer.py --target /path/to/myrepo --dry-run
 ```
 
 Output:
@@ -379,7 +379,7 @@ Output:
 ### Example 4: Node.js/TypeScript Project
 
 ```bash
-python ~/legacy-to-agentic-ready/scripts/run_transformer.py --target /path/to/nextjs-app
+python ~/agent-ready/scripts/run_transformer.py --target /path/to/nextjs-app
 ```
 
 **Detected:**
@@ -468,7 +468,7 @@ export OPENAI_API_KEY="sk-..."
 export GOOGLE_API_KEY="..."
 
 # Optional: custom toolkit path for pre-commit hooks
-git config agentic.toolkit-path /path/to/legacy-to-agentic-ready
+git config agentic.toolkit-path /path/to/agent-ready
 ```
 
 ---
@@ -549,7 +549,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-    uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+    uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
     secrets: inherit
 ```
 
@@ -634,7 +634,7 @@ jobs:
           python-version: "3.11"
 
       - name: Clone transformer toolkit
-        run: git clone --depth 1 https://github.com/vb-nattamai/legacy-to-agentic-ready.git /tmp/toolkit
+        run: git clone --depth 1 https://github.com/vb-nattamai/agent-ready.git /tmp/toolkit
 
       - name: Dry-run (no files written)
         run: |
@@ -673,7 +673,7 @@ jobs:
 
 If you maintain many repos, use the install workflow to push the trigger file automatically.
 
-**From this (legacy-to-agentic-ready) repo:**
+**From this (agent-ready) repo:**
 
 1. Go to **Actions** → **"Install Agentic Ready to Repo"**
 2. Click **Run workflow**
@@ -778,7 +778,7 @@ Once merged, any AI agent tool pointed at your repo will automatically find and 
 Replace `.github/` with `.gitea/` — identical YAML syntax:
 
 ```yaml
-uses: your-gitea.com/vb-nattamai/legacy-to-agentic-ready/.gitea/workflows/reusable-transformer.yml@main
+uses: your-gitea.com/vb-nattamai/agent-ready/.gitea/workflows/reusable-transformer.yml@main
 ```
 
 **See [docs/automation.md](docs/automation.md) for Gitea-specific setup including collaborator check via API.**
@@ -839,7 +839,7 @@ Use this to drive adoption — teams want high scores!
 **Pre-commit hook (recommended for local development)**
 ```bash
 python scripts/run_transformer.py --target /path/to/your-repo --install-hooks
-git -C /path/to/your-repo config agentic.toolkit-path /path/to/legacy-to-agentic-ready
+git -C /path/to/your-repo config agentic.toolkit-path /path/to/agent-ready
 ```
 ✅ Automatically refreshes the **dynamic section** of `agent-context.json` whenever source files change.
 
@@ -863,7 +863,7 @@ perms:
   pull-requests: write
 jobs:
   refresh:
-    uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/context-refresh.yml@main
+    uses: vb-nattamai/agent-ready/.github/workflows/context-refresh.yml@main
     with:
       schedule: 'weekly'
     secrets: inherit

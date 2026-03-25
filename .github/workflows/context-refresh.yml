@@ -19,7 +19,7 @@ jobs:
       - name: Check out agentic toolkit
         uses: actions/checkout@v4
         with:
-          repository: vb-nattamai/legacy-to-agentic-ready
+          repository: vb-nattamai/agent-ready
           path: .agentic-toolkit
 
       - name: Set up Python 3.11

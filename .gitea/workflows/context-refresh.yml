@@ -16,7 +16,7 @@ jobs:
       - name: Check out agentic toolkit
         run: |
           git clone -b main --depth 1 \
-            ${{ gitea.server }}/vb-nattamai/legacy-to-agentic-ready .agentic-toolkit
+            ${{ gitea.server }}/vb-nattamai/agent-ready .agentic-toolkit
 
       - name: Set up Python 3.11
         uses: gitea.com/actions/setup-python@v4

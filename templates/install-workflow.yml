@@ -11,5 +11,5 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-    uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+    uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
     secrets: inherit

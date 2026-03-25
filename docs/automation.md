@@ -1,6 +1,6 @@
 # Automation Guide: GitHub & Gitea Workflows
 
-This guide shows how to integrate `legacy-to-agentic-ready` into your CI/CD pipelines and issue trackers using GitHub Actions and Gitea Actions.
+This guide shows how to integrate AgentReady (`agent-ready`) into your CI/CD pipelines and issue trackers using GitHub Actions and Gitea Actions.
 
 ## Quick Start
 
@@ -20,7 +20,7 @@ jobs:
     if: |
       contains(github.event.issue.title, '[agentic-ready]') ||
       contains(github.event.issue.labels.*.name, 'agentic-ready')
-    uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+    uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
     secrets: inherit
 ```
 
@@ -35,7 +35,7 @@ Add this step to any GitHub Actions workflow in your repo:
 
 ```yaml
 - name: Make repo agentic-ready
-  uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+  uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
   with:
     target_branch: main
     only: ''  # or 'agents', 'tools', 'context', 'memory'
@@ -59,7 +59,7 @@ on:
 # In your .github/workflows/deploy.yml
 - name: Setup agents on first deploy
   if: github.event_name == 'deployment' && github.payload.deployment.environment == 'production'
-  uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+  uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
   secrets: inherit
 ```
 
@@ -186,7 +186,7 @@ Use the **`install-to-repo.yml`** workflow to add agentic-ready to any other Git
 
 ### Steps:
 
-1. Go to your `legacy-to-agentic-ready` repo
+1. Go to your AgentReady (`agent-ready`) repo
 2. Click **Actions** → **Install Agentic Ready to Repo**
 3. Click **Run workflow**
 4. Fill in:
@@ -218,7 +218,7 @@ jobs:
     if: |
       contains(github.event.issue.title, '[agentic-ready]') ||
       contains(github.event.issue.labels.*.name, 'agentic-ready')
-    uses: your-gitea-instance.com/vb-nattamai/legacy-to-agentic-ready/.gitea/workflows/reusable-transformer.yml@main
+    uses: your-gitea-instance.com/vb-nattamai/agent-ready/.gitea/workflows/reusable-transformer.yml@main
     secrets: inherit
 ```
 
@@ -227,7 +227,7 @@ jobs:
 ```yaml
 # In your .gitea/workflows/deploy.yml
 - name: Make repo agentic-ready
-  uses: your-gitea-instance.com/vb-nattamai/legacy-to-agentic-ready/.gitea/workflows/reusable-transformer.yml@main
+  uses: your-gitea-instance.com/vb-nattamai/agent-ready/.gitea/workflows/reusable-transformer.yml@main
   with:
     target_branch: main
   secrets:
@@ -258,7 +258,7 @@ on:
     - cron: '0 0 * * 0'  # Sundays at midnight UTC
 jobs:
   update:
-    uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+    uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
     with:
       target_branch: main
       force: false
@@ -270,7 +270,7 @@ jobs:
 
 ```yaml
 - name: Generate tools only
-  uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+  uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
   with:
     only: tools
   secrets: inherit
@@ -280,7 +280,7 @@ jobs:
 
 ```yaml
 - name: Regenerate all files
-  uses: vb-nattamai/legacy-to-agentic-ready/.github/workflows/reusable-transformer.yml@main
+  uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
   with:
     force: true
   secrets: inherit

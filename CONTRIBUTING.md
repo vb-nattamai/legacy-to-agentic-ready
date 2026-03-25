@@ -8,7 +8,7 @@ First off, thank you for considering contributing to `legacy-to-agentic-ready`! 
 
 ```bash
 # Clone the repository
-git clone https://github.com/vb-nattamai/legacy-to-agentic-ready.git
+git clone https://github.com/vb-nattamai/agent-ready.git
 cd legacy-to-agentic-ready
 
 # Create a virtual environment

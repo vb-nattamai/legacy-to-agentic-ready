@@ -152,5 +152,5 @@ Initial release with core functionality:
 
 ---
 
-[1.1.0]: https://github.com/vb-nattamai/legacy-to-agentic-ready/releases/tag/v1.1.0
-[1.0.0]: https://github.com/vb-nattamai/legacy-to-agentic-ready/releases/tag/v1.0.0
+[1.1.0]: https://github.com/vb-nattamai/agent-ready/releases/tag/v1.1.0
+[1.0.0]: https://github.com/vb-nattamai/agent-ready/releases/tag/v1.0.0
