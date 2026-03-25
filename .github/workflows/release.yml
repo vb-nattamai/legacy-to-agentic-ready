@@ -1,0 +1,258 @@
+name: Release — Semantic Versioning & GitHub Releases
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    name: Determine Version & Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.new_version }}
+      created: ${{ steps.create_release.outputs.created }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Parse commits & determine version
+        id: version
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(grep '"version":' scripts/run_transformer.py | grep -oP '\d+\.\d+\.\d+' | head -1)
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          
+          # Get all commit messages since last tag
+          COMMITS=$(git log $(git describe --tags --abbrev=0 2>/dev/null)..HEAD --format='%B' 2>/dev/null || git log HEAD~10..HEAD --format='%B')
+          
+          # Check for breaking changes (major)
+          if echo "$COMMITS" | grep -q "BREAKING CHANGE:"; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            BUMP=major
+          # Check for features (minor)
+          elif echo "$COMMITS" | grep -q "^feat:"; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            BUMP=minor
+          # Check for fixes (patch)
+          elif echo "$COMMITS" | grep -q "^fix:"; then
+            PATCH=$((PATCH + 1))
+            BUMP=patch
+          # Check for docs/chore/style (no version bump if only these)
+          elif echo "$COMMITS" | grep -qE "^(docs|chore|style|test|refactor):"; then
+            BUMP=none
+          else
+            BUMP=none
+          fi
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+          
+          echo "✅ Version analysis:"
+          echo "   Current: $CURRENT_VERSION"
+          echo "   New: $NEW_VERSION"
+          echo "   Bump type: $BUMP"
+
+      - name: Only proceed if version bumped
+        if: steps.version.outputs.bump != 'none'
+        run: |
+          echo "🚀 Creating release for v${{ steps.version.outputs.new_version }}"
+
+      - name: Update version in transformer script
+        if: steps.version.outputs.bump != 'none'
+        run: |
+          sed -i 's/"version": "[0-9]*\.[0-9]*\.[0-9]*"/"version": "${{ steps.version.outputs.new_version }}"/' scripts/run_transformer.py
+          echo "✅ Updated scripts/run_transformer.py to v${{ steps.version.outputs.new_version }}"
+
+      - name: Generate changelog section
+        if: steps.version.outputs.bump != 'none'
+        id: changelog
+        run: |
+          CHANGELOG_ENTRY=$(python3 <<'SCRIPT'
+          import subprocess
+          import re
+          
+          # Get commits since last tag
+          try:
+              last_tag = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0'], stderr=subprocess.DEVNULL).decode().strip()
+              commits = subprocess.check_output(['git', 'log', f'{last_tag}..HEAD', '--format=%H %s']).decode()
+          except:
+              commits = subprocess.check_output(['git', 'log', 'HEAD~20..HEAD', '--format=%H %s']).decode()
+          
+          lines = commits.strip().split('\n')
+          
+          added = []
+          changed = []
+          fixed = []
+          breaking = []
+          
+          for line in lines:
+              if not line.strip():
+                  continue
+              parts = line.split(' ', 1)
+              if len(parts) < 2:
+                  continue
+              message = parts[1]
+              
+              if message.startswith('feat'):
+                  added.append(message.replace('feat: ', '').replace('feat(', ''))
+              elif message.startswith('fix'):
+                  fixed.append(message.replace('fix: ', '').replace('fix(', ''))
+              elif message.startswith('BREAKING'):
+                  breaking.append(message)
+              elif message.startswith('docs') or message.startswith('docs:'):
+                  changed.append(message.replace('docs: ', ''))
+          
+          entry = "### Added\n\n"
+          if added:
+              for item in added:
+                  entry += f"- {item}\n"
+          else:
+              entry += "- Minor improvements\n"
+          
+          if breaking:
+              entry += "\n### ⚠️ Breaking Changes\n\n"
+              for item in breaking:
+                  entry += f"- {item}\n"
+          
+          if fixed:
+              entry += "\n### Fixed\n\n"
+              for item in fixed:
+                  entry += f"- {item}\n"
+          
+          if changed:
+              entry += "\n### Changed\n\n"
+              for item in changed:
+                  entry += f"- {item}\n"
+          
+          print(entry)
+          SCRIPT
+          )
+          
+          echo "CHANGELOG_ENTRY<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG_ENTRY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Update CHANGELOG.md
+        if: steps.version.outputs.bump != 'none'
+        run: |
+          python3 <<'SCRIPT'
+          import datetime
+          
+          version = "${{ steps.version.outputs.new_version }}"
+          today = datetime.date.today().strftime("%Y-%m-%d")
+          
+          changelog_entry = f"""## [{version}] — {today}
+
+${{ env.CHANGELOG_ENTRY }}
+
+---
+
+"""
+          
+          # Read current CHANGELOG
+          try:
+              with open('CHANGELOG.md', 'r') as f:
+                  content = f.read()
+          except:
+              content = ""
+          
+          # Find where to insert (after the header)
+          lines = content.split('\n')
+          insert_pos = 0
+          for i, line in enumerate(lines):
+              if line.startswith('## ['):
+                  insert_pos = i
+                  break
+          
+          # Insert new version entry
+          if insert_pos > 0:
+              new_content = '\n'.join(lines[:insert_pos]) + '\n' + changelog_entry + '\n'.join(lines[insert_pos:])
+          else:
+              new_content = changelog_entry + content
+          
+          with open('CHANGELOG.md', 'w') as f:
+              f.write(new_content)
+          
+          print(f"✅ Updated CHANGELOG.md with v{version}")
+          SCRIPT
+
+      - name: Commit version & changelog bump
+        if: steps.version.outputs.bump != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add scripts/run_transformer.py CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+          git push origin main
+
+      - name: Create git tag
+        if: steps.version.outputs.bump != 'none'
+        run: |
+          git tag -a "v${{ steps.version.outputs.new_version }}" -m "Release v${{ steps.version.outputs.new_version }}"
+          git push origin "v${{ steps.version.outputs.new_version }}"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.bump != 'none'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.new_version }}
+          release_name: Release v${{ steps.version.outputs.new_version }}
+          body: |
+            # Release v${{ steps.version.outputs.new_version }}
+
+            **Release Date:** ${{ github.event.repository.updated_at }}
+
+            ## What's New
+
+            ${{ env.CHANGELOG_ENTRY }}
+
+            ---
+
+            **Full Changelog:** https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.current_version }}...v${{ steps.version.outputs.new_version }}
+
+            **View or download the transformer:**
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git
+            git checkout v${{ steps.version.outputs.new_version }}
+            python scripts/run_transformer.py --help
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.version.outputs.bump }}" = "none" ]; then
+            echo "ℹ️  No version bump (docs/chore/style commits only)"
+          else
+            echo "✅ Release v${{ steps.version.outputs.new_version }} created!"
+            echo "   - Version bumped: ${{ steps.version.outputs.bump }}"
+            echo "   - GitHub Release created"
+            echo "   - Git tag: v${{ steps.version.outputs.new_version }}"
+            echo "   - CHANGELOG.md updated"
+          fi
