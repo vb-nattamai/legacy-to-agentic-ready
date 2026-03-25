@@ -41,12 +41,12 @@ jobs:
         run: |
           CONTENT=$(base64 -i toolkit/templates/install-workflow.yml | tr -d '\n')
 
-          # Check if file already exists
-          EXISTING=$(gh api "repos/$TARGET_REPO/contents/.github%2Fworkflows%2Fagentic-ready.yml" 2>/dev/null || echo "")
+          # Get SHA if file already exists (empty if not)
+          SHA=$(gh api "repos/$TARGET_REPO/contents/.github%2Fworkflows%2Fagentic-ready.yml" \
+            --jq '.sha' 2>/dev/null || true)
 
-          if [ -n "$EXISTING" ]; then
+          if [ -n "$SHA" ]; then
             echo "ℹ️  Workflow already exists, updating..."
-            SHA=$(echo "$EXISTING" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
             gh api "repos/$TARGET_REPO/contents/.github%2Fworkflows%2Fagentic-ready.yml" \
               -X PUT \
               -f "message=chore: update agentic-ready workflow" \
