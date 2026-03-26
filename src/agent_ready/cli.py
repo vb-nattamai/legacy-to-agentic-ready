@@ -749,7 +749,12 @@ def score(target_path: Path) -> dict[str, Any]:
         list(target_path.glob("**/swagger.yml")),
         list(target_path.glob("**/swagger.json")),
     ]))
-    criteria["CI config exists"] = (5, any(target_path.glob(".github/workflows/*.yml")) or any(target_path.glob(".gitea/workflows/*.yml")))
+    criteria["CI config exists"] = (5, any(target_path.glob(".github/workflows/*.yml"))
+        or any(target_path.glob(".gitea/workflows/*.yml"))
+        or (target_path / ".travis.yml").exists()
+        or (target_path / ".circleci/config.yml").exists()
+        or (target_path / "Jenkinsfile").exists()
+)
 
     total = 0
     table_rows = []
@@ -941,7 +946,7 @@ Examples:
                 print("     - Generate agent-context.json (run without --only flag)")
             if not any(target.glob("**/openapi.{yaml,json,yml}")):
                 print("     - Add an OpenAPI spec (openapi.yaml)")
-            if args.llm is False:
+            if not args.llm:
                 print("     - Re-run with --llm for real content instead of placeholders")
         print("──────────────────────────────────────────────")
         print()

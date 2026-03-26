@@ -1,59 +1,103 @@
-name: Reusable Agentic Ready Transformer
+name: Agentic Ready Transformer
 
 on:
-  workflow_call:
+  # Manually triggered from the agent-ready Actions tab
+  workflow_dispatch:
     inputs:
+      target_repo:
+        description: 'Target repo to transform (e.g. myorg/my-app)'
+        required: true
+        type: string
       target_branch:
         description: 'Base branch to create PR against'
         required: false
         default: 'main'
         type: string
       only:
-        description: 'Pass to --only flag (agents|tools|context|memory), empty = all'
+        description: 'Limit generation (agents|tools|context|memory), empty = all'
         required: false
         default: ''
         type: string
       force:
-        description: 'Pass --force to overwrite existing files'
+        description: 'Overwrite existing files'
+        required: false
+        default: false
+        type: boolean
+      llm:
+        description: 'Use LLM-first mode (Claude Opus analysis + Sonnet generation)'
         required: false
         default: false
         type: boolean
       issue_number:
-        description: 'Issue number that triggered this run (for auto-close)'
+        description: 'Issue number in the target repo to close after PR is opened'
         required: false
         default: ''
         type: string
-    secrets:
-      ANTHROPIC_API_KEY:
-        description: 'Optional Anthropic API key for LLM-enhanced generation'
+
+  # Also callable from other workflows within agent-ready itself
+  workflow_call:
+    inputs:
+      target_repo:
+        description: 'Target repo to transform (e.g. myorg/my-app)'
+        required: true
+        type: string
+      target_branch:
+        description: 'Base branch to create PR against'
         required: false
-      OPENAI_API_KEY:
-        description: 'Optional OpenAI API key'
+        default: 'main'
+        type: string
+      only:
+        description: 'Limit generation (agents|tools|context|memory), empty = all'
         required: false
-      GOOGLE_API_KEY:
-        description: 'Optional Google API key'
+        default: ''
+        type: string
+      force:
+        description: 'Overwrite existing files'
         required: false
+        default: false
+        type: boolean
+      llm:
+        description: 'Use LLM-first mode (Claude Opus analysis + Sonnet generation)'
+        required: false
+        default: false
+        type: boolean
+      issue_number:
+        description: 'Issue number in the target repo to close after PR is opened'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   transform:
+    # Always runs inside agent-ready — secrets never need to exist in the target repo
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-    
-    steps:
-      - name: Checkout caller repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      contents: read
 
-      - name: Checkout toolkit repository
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ ! "${{ inputs.target_repo }}" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+            echo "❌ Invalid repo format. Use: owner/repo"
+            exit 1
+          fi
+          echo "✅ Target: ${{ inputs.target_repo }}@${{ inputs.target_branch }}"
+          echo "   LLM mode: ${{ inputs.llm }}"
+          echo "   Only:     ${{ inputs.only || 'all' }}"
+          echo "   Force:    ${{ inputs.force }}"
+
+      - name: Checkout agent-ready (this repo — contains the transformer)
         uses: actions/checkout@v4
         with:
-          repository: vb-nattamai/agent-ready
-          path: .agentic-toolkit
-          ref: main
+          path: agent-ready
+
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.target_repo }}
+          token: ${{ secrets.INSTALL_TOKEN || github.token }}
+          path: target-repo
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
@@ -61,127 +105,139 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install agent-ready with AI dependencies
         run: |
-          python -m pip install --upgrade pip
-
-          # Ensure packaging toolchain is up-to-date for editable installs
-          python -m pip install --upgrade setuptools wheel build
-
-          if [ -f .agentic-toolkit/requirements.txt ]; then
-            python -m pip install -r .agentic-toolkit/requirements.txt || echo "⚠️  could not install optional requirements, continuing"
-          fi
-
-          # Install agent-ready so the shim can import it
-          # Use a non-editable install to avoid editable/pyproject backend issues in CI
-          cd .agentic-toolkit
-          python -m pip install --upgrade setuptools wheel
-          python -m pip install . -q
+          python -m pip install --upgrade pip setuptools wheel build
+          cd agent-ready
+          # Install with [ai] extra so anthropic is always available for --llm mode
+          python -m pip install ".[ai]" -q
           cd ..
 
-      - name: Configure git
+      - name: Configure git for target repo
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
+          cd target-repo
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
 
-      - name: Run transformer
+      - name: Run transformer against target repo
         id: transform
         env:
+          # ANTHROPIC_API_KEY lives only in agent-ready — never needed in target repos
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
-          cd "$(pwd)"
-          
-          # Build command
-          CMD="python .agentic-toolkit/scripts/run_transformer.py --target ."
-          [ -n "${{ inputs.only }}" ] && CMD="$CMD --only ${{ inputs.only }}"
-          [ "${{ inputs.force }}" = "true" ] && CMD="$CMD --force"
-          
+          # Build the transformer command
+          CMD="python agent-ready/src/agent_ready/cli.py --target ./target-repo"
+          [ -n "${{ inputs.only }}" ]          && CMD="$CMD --only ${{ inputs.only }}"
+          [ "${{ inputs.force }}" = "true" ]   && CMD="$CMD --force"
+          [ "${{ inputs.llm }}"   = "true" ]   && CMD="$CMD --llm"
+
           echo "Running: $CMD"
           echo ""
-          
           $CMD
-          
-          # Check if files were generated (covers new untracked files too)
+
+          # Check if the target repo has new or modified files
+          cd target-repo
           if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
             echo "generated=false" >> $GITHUB_OUTPUT
-            echo "✅ Already up to date"
+            echo "✅ Already up to date — nothing to commit"
           else
             echo "generated=true" >> $GITHUB_OUTPUT
             echo "✅ Files generated"
           fi
 
-      - name: Create branch and commit (if files generated)
+      - name: Create branch and commit in target repo
         if: steps.transform.outputs.generated == 'true'
         run: |
+          cd target-repo
+
           BRANCH_NAME="agentic-ready/init"
           if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
             BRANCH_NAME="agentic-ready/update-$(date +%Y%m%d-%H%M%S)"
           fi
+
           git checkout -b "$BRANCH_NAME"
-          echo ".agentic-toolkit" >> .git/info/exclude
           git add -A
-          # Only commit if there are staged changes (avoid failing when nothing to commit)
+
           if git diff --cached --quiet; then
-            echo "No changes to commit; skipping push."
-            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+            echo "No staged changes — skipping commit."
           else
             git commit -m "feat: add agentic-ready scaffolding [skip ci]"
-            git push origin "$BRANCH_NAME"
-            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+            git push "https://x-access-token:${{ secrets.INSTALL_TOKEN || github.token }}@github.com/${{ inputs.target_repo }}.git" "$BRANCH_NAME"
           fi
 
-      - name: Create Pull Request
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Create Pull Request in target repo
         if: steps.transform.outputs.generated == 'true'
         id: pr
+        env:
+          GH_TOKEN: ${{ secrets.INSTALL_TOKEN || github.token }}
         run: |
           BRANCH_NAME="${{ env.BRANCH_NAME }}"
-          gh label create agentic-ready --color "4CAF50" --description "Agentic ready scaffolding" 2>/dev/null || true
+          TARGET_REPO="${{ inputs.target_repo }}"
+          TARGET_BRANCH="${{ inputs.target_branch }}"
 
-          # Verify the branch was actually pushed to origin before creating a PR
-          if git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
+          # Create label (ignore error if it already exists)
+          gh label create agentic-ready \
+            --repo "$TARGET_REPO" \
+            --color "4CAF50" \
+            --description "Agentic ready scaffolding" 2>/dev/null || true
+
+          # Only create a PR if the branch was actually pushed
+          if git -C target-repo ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
             echo "Branch $BRANCH_NAME found on origin — creating PR."
-            if [ -f .agentic-toolkit/.github/PR_TEMPLATE.md ]; then
+
+            if [ -f agent-ready/.github/PR_TEMPLATE.md ]; then
               PR_URL=$(gh pr create \
+                --repo "$TARGET_REPO" \
                 --title "🤖 Add agentic-ready scaffolding" \
-                --body-file .agentic-toolkit/.github/PR_TEMPLATE.md \
-                --base "${{ inputs.target_branch }}" \
+                --body-file agent-ready/.github/PR_TEMPLATE.md \
+                --base "$TARGET_BRANCH" \
                 --head "$BRANCH_NAME" \
                 --label agentic-ready)
             else
               PR_URL=$(gh pr create \
+                --repo "$TARGET_REPO" \
                 --title "🤖 Add agentic-ready scaffolding" \
                 --body "Generated by [AgentReady](https://github.com/vb-nattamai/agent-ready)" \
-                --base "${{ inputs.target_branch }}" \
+                --base "$TARGET_BRANCH" \
                 --head "$BRANCH_NAME" \
                 --label agentic-ready)
             fi
+
             echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
             echo "Pull Request created: $PR_URL"
           else
-            echo "Branch $BRANCH_NAME was not pushed to origin; skipping PR creation."
+            echo "Branch was not pushed — skipping PR creation."
             echo "pr_url=" >> $GITHUB_OUTPUT
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
 
-      - name: Post success
+      - name: Post success summary
         if: steps.pr.outputs.pr_url != ''
         run: |
-          echo "✅ Transformation Complete"
-          echo "PR: ${{ steps.pr.outputs.pr_url }}"
+          echo "✅ Transformation complete!"
+          echo "   Target: ${{ inputs.target_repo }}"
+          echo "   PR:     ${{ steps.pr.outputs.pr_url }}"
 
-      - name: Close triggering issue
+      - name: Close triggering issue in target repo
         if: inputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.INSTALL_TOKEN || github.token }}
         run: |
           PR_URL="${{ steps.pr.outputs.pr_url }}"
           ISSUE="${{ inputs.issue_number }}"
+          TARGET_REPO="${{ inputs.target_repo }}"
+
           if [ -n "$PR_URL" ]; then
-            gh issue comment "$ISSUE" --body "✅ Transformation complete! PR opened: $PR_URL\n\nReview and merge to add the agentic scaffolding to this repo."
+            gh issue comment "$ISSUE" \
+              --repo "$TARGET_REPO" \
+              --body "✅ Transformation complete! PR opened: $PR_URL"$'\n'"Review and merge to add the agentic scaffolding to this repository."
           else
-            gh issue comment "$ISSUE" --body "ℹ️ Installer run completed — repository already up to date or no changes were produced. No PR was created."
+            gh issue comment "$ISSUE" \
+              --repo "$TARGET_REPO" \
+              --body "ℹ️ Installer run completed — repository already up to date or no changes were produced. No PR was created."
           fi
-          gh issue close "$ISSUE" --reason completed
-        env:
-          GH_TOKEN: ${{ github.token }}
+
+          gh issue close "$ISSUE" --repo "$TARGET_REPO" --reason completed

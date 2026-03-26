@@ -1,22 +1,23 @@
-name: Agentic Ready - Issue Trigger
+name: Agentic Ready - Trigger Dispatcher
 
 on:
   issues:
     types: [opened, labeled]
 
 jobs:
-  transform:
+  check-permission:
     if: |
       contains(github.event.issue.title, '[agentic-ready]') ||
       contains(github.event.issue.labels.*.name, 'agentic-ready')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-    
+      issues: read
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+
     steps:
       - name: Check actor is a repo collaborator
+        id: check
         uses: actions/github-script@v7
         with:
           script: |
@@ -28,140 +29,22 @@ jobs:
             const allowed = ['admin', 'write', 'maintain'];
             if (!allowed.includes(perm.permission)) {
               core.setFailed(`@${context.actor} does not have write access. Transformation skipped.`);
+              core.setOutput('allowed', 'false');
+            } else {
+              core.setOutput('allowed', 'true');
             }
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Checkout toolkit
-        uses: actions/checkout@v4
-        with:
-          repository: vb-nattamai/agent-ready
-          path: .agentic-toolkit
-          ref: main
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel build
-          if [ -f .agentic-toolkit/requirements.txt ]; then
-            pip install -q -r .agentic-toolkit/requirements.txt || true
-          fi
-          # Install agent-ready so scripts/run_transformer.py can import it
-          python -m pip install ./.agentic-toolkit -q
-
-      - name: Configure git
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-
-      - name: Run transformer
-        id: transform
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: |
-          cd "$(pwd)"
-          
-          python .agentic-toolkit/scripts/run_transformer.py --target .
-
-          # Check for any changes including new untracked files
-          if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-            echo "generated=false" >> $GITHUB_OUTPUT
-            echo "✅ Already up to date"
-          else
-            echo "generated=true" >> $GITHUB_OUTPUT
-            echo "✅ Files generated"
-          fi
-
-      - name: Create branch and commit
-        if: steps.transform.outputs.generated == 'true'
-        id: branch
-        run: |
-          BRANCH_NAME="agentic-ready/init"
-          if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
-            BRANCH_NAME="agentic-ready/update-$(date +%Y%m%d-%H%M%S)"
-          fi
-          git checkout -b "$BRANCH_NAME"
-          echo ".agentic-toolkit" >> .git/info/exclude
-          git add -A
-          # Only commit if there are staged changes
-          if git diff --cached --quiet; then
-            echo "No changes to commit; skipping push."
-          else
-            git commit -m "feat: add agentic-ready scaffolding [skip ci]"
-            git push origin "$BRANCH_NAME"
-          fi
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-
-      - name: Create Pull Request
-        if: steps.transform.outputs.generated == 'true'
-        id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          BRANCH_NAME="${{ steps.branch.outputs.branch_name }}"
-          gh label create agentic-ready --color "4CAF50" --description "Agentic ready scaffolding" 2>/dev/null || true
-
-          # Verify the branch was actually pushed to origin before creating a PR
-          if ! git ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
-            echo "Branch $BRANCH_NAME was not pushed to origin; skipping PR creation."
-            echo "pr_url=" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          if [ -f .agentic-toolkit/.github/PR_TEMPLATE.md ]; then
-            PR_URL=$(gh pr create \
-              --title "🤖 Add agentic-ready scaffolding" \
-              --body-file .agentic-toolkit/.github/PR_TEMPLATE.md \
-              --base "$DEFAULT_BRANCH" \
-              --head "$BRANCH_NAME" \
-              --label agentic-ready)
-          else
-            PR_URL=$(gh pr create \
-              --title "🤖 Add agentic-ready scaffolding" \
-              --body "Generated by [AgentReady](https://github.com/vb-nattamai/agent-ready)" \
-              --base "$DEFAULT_BRANCH" \
-              --head "$BRANCH_NAME" \
-              --label agentic-ready)
-          fi
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-
-      - name: Comment on issue
-        if: steps.transform.outputs.generated == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_URL: ${{ steps.pr.outputs.pr_url }}
-          ISSUE_NUM: ${{ github.event.issue.number }}
-        run: |
-          printf '🤖 **Agentic Ready Transformation Complete**\n\nPull Request: %s\n\nGenerated files:\n- CLAUDE.md, AGENTS.md, agent-context.json, system_prompt.md, mcp.json, tools/, memory/schema.md\n\nReview the PR, adjust placeholder values, and merge when ready.\n' "$PR_URL" > /tmp/issue_body.txt
-          gh issue comment "$ISSUE_NUM" --body-file /tmp/issue_body.txt
-
-      - name: Add success label
-        if: steps.transform.outputs.generated == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh label create agentic-ready-complete --color "00BCD4" --description "Agentic ready transformation complete" 2>/dev/null || true
-          gh issue edit "${{ github.event.issue.number }}" --add-label "agentic-ready-complete"
-
-      - name: Handle transformation failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          ISSUE_NUM: ${{ github.event.issue.number }}
-        run: |
-          gh label create agentic-ready-failed --color "f44336" --description "Agentic ready transformation failed" 2>/dev/null || true
-          printf '❌ **Agentic Ready Transformation Failed**\n\nSee the [workflow run](%s) for details.\n' "$RUN_URL" > /tmp/fail_body.txt
-          gh issue comment "$ISSUE_NUM" --body-file /tmp/fail_body.txt || true
-          gh issue edit "$ISSUE_NUM" --add-label "agentic-ready-failed" || true
+  transform:
+    needs: check-permission
+    if: needs.check-permission.outputs.allowed == 'true'
+    # Delegates to reusable-transformer.yml which runs inside agent-ready.
+    # This means ANTHROPIC_API_KEY only needs to exist in agent-ready — not here.
+    uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
+    with:
+      target_repo: ${{ github.repository }}
+      target_branch: ${{ github.event.repository.default_branch }}
+      issue_number: ${{ github.event.issue.number }}
+      llm: false        # set to true to enable LLM-first mode
+      force: false
+      only: ''
+    secrets: inherit
