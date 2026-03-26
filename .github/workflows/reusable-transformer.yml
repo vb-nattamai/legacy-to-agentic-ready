@@ -108,7 +108,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel build
           AGENT_READY_PATH="$(realpath "$GITHUB_WORKSPACE/agent-ready")"
-          pip install "${AGENT_READY_PATH}[ai]" -q
+          pip install anthropic>=0.40.0 -q
 
       - name: Configure git for target repo
         run: |
