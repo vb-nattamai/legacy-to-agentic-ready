@@ -598,7 +598,7 @@ class AgenticGenerator:
     def _generate_memory_schema(self) -> None:
         """Generate minimal memory schema."""
         schema = {
-            "version": "1.2.2",
+            "version": "1.3.0",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "project": self.meta.get("project_name", "Project"),
             "languages": self.meta.get("primary_languages", []),
