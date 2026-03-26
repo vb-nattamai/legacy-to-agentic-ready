@@ -125,7 +125,7 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
           # Build the transformer command
-          CMD="python agent-ready/src/agent_ready/cli.py --target ./target-repo"
+          CMD="python -m agent_ready.cli --target ./target-repo"
           [ -n "${{ inputs.only }}" ]          && CMD="$CMD --only ${{ inputs.only }}"
           [ "${{ inputs.force }}" = "true" ]   && CMD="$CMD --force"
           [ "${{ inputs.llm }}"   = "true" ]   && CMD="$CMD --llm"
