@@ -1,6 +1,43 @@
-# legacy-to-agentic-ready
 
-This repo is superseded by https://github.com/vb-nattamai/agent-ready
+# AgentReady
+
+[![Version](https://img.shields.io/github/v/release/vb-nattamai/agent-ready)](https://github.com/vb-nattamai/agent-ready/releases)
+[![License](https://img.shields.io/github/license/vb-nattamai/agent-ready)](LICENSE)
+
+**This repo is superseded by [vb-nattamai/agent-ready](https://github.com/vb-nattamai/agent-ready)**
+
+---
+
+## Quick Start
+
+### 1. Install via pip (recommended)
+
+```bash
+pip install git+https://github.com/vb-nattamai/agent-ready.git
+```
+
+### 2. Run the transformer against your target repo
+
+```bash
+# Basic usage (static analysis only)
+agent-ready --target /path/to/your/repo
+
+# With LLM enhancement (if API key is set)
+agent-ready --target /path/to/your/repo --provider anthropic
+
+# Preview without writing files
+agent-ready --target /path/to/your/repo --dry-run
+```
+
+---
+
+### Alternate: Clone and run manually (advanced)
+
+```bash
+git clone https://github.com/vb-nattamai/agent-ready.git
+cd agent-ready
+python scripts/run_transformer.py --target /path/to/your/repo
+```
 
 ## Quick Start
 
