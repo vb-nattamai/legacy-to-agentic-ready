@@ -72,10 +72,11 @@ jobs:
             python -m pip install -r .agentic-toolkit/requirements.txt || echo "⚠️  could not install optional requirements, continuing"
           fi
 
-          # Install agent-ready in development mode so the shim can import it
+          # Install agent-ready so the shim can import it
+          # Use a non-editable install to avoid editable/pyproject backend issues in CI
           cd .agentic-toolkit
           python -m pip install --upgrade setuptools wheel
-          python -m pip install -e . -q
+          python -m pip install . -q
           cd ..
 
       - name: Configure git
