@@ -12,13 +12,18 @@ on:
         required: false
         default: 'main'
         type: string
+      llm:
+        description: 'Enable LLM-first mode in the installed trigger workflow'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   install:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
+
     steps:
       - name: Validate inputs
         run: |
@@ -26,28 +31,44 @@ jobs:
             echo "❌ Invalid repo format. Use: owner/repo"
             exit 1
           fi
+          if [ -z "${{ secrets.INSTALL_TOKEN }}" ]; then
+            echo "⚠️  INSTALL_TOKEN not set — falling back to github.token"
+            echo "   This will fail for repos outside this org."
+          fi
           echo "✅ Installing to: ${{ inputs.target_repo }}@${{ inputs.target_branch }}"
+          echo "   LLM mode: ${{ inputs.llm }}"
 
-      - name: Checkout toolkit (for workflow template)
+      - name: Checkout toolkit (for workflow templates)
         uses: actions/checkout@v4
         with:
           path: toolkit
 
-      - name: Create issue-trigger workflow in target repo
+      - name: Push trigger workflows into target repo
         env:
           GH_TOKEN: ${{ secrets.INSTALL_TOKEN || github.token }}
           TARGET_REPO: ${{ inputs.target_repo }}
           TARGET_BRANCH: ${{ inputs.target_branch }}
+          LLM_MODE: ${{ inputs.llm }}
         run: |
           # Clone target repo using the token for auth
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" target-repo
           cd target-repo
 
           mkdir -p .github/workflows .github/ISSUE_TEMPLATE
-          # Issue trigger — opens a PR when [agentic-ready] issue is created
-          cp ../toolkit/templates/install-workflow.yml .github/workflows/agentic-ready.yml
+
+          # If LLM mode is requested, patch the issue-trigger template before copying
+          if [ "$LLM_MODE" = "true" ]; then
+            sed 's/llm: false/llm: true/' \
+              ../toolkit/templates/install-workflow.yml \
+              > .github/workflows/agentic-ready.yml
+            echo "✅ LLM mode enabled in trigger workflow"
+          else
+            cp ../toolkit/templates/install-workflow.yml .github/workflows/agentic-ready.yml
+          fi
+
           # Weekly context refresh — detects agent-context.json drift every Monday
           cp ../toolkit/templates/context-refresh-workflow.yml .github/workflows/context-refresh.yml
+
           # Issue form template — pre-fills title + checklist so trigger always fires correctly
           cp ../toolkit/templates/issue-template-agentic-ready.yml .github/ISSUE_TEMPLATE/agentic-ready.yml
 
@@ -57,7 +78,9 @@ jobs:
           if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
             echo "ℹ️  Workflows already up to date, nothing to commit"
           else
-            git add .github/workflows/agentic-ready.yml .github/workflows/context-refresh.yml .github/ISSUE_TEMPLATE/agentic-ready.yml
+            git add .github/workflows/agentic-ready.yml \
+                    .github/workflows/context-refresh.yml \
+                    .github/ISSUE_TEMPLATE/agentic-ready.yml
             if git ls-remote --heads origin "refs/heads/${TARGET_BRANCH}" | grep -q "${TARGET_BRANCH}"; then
               git commit -m "feat: add AgentReady automation workflows, context refresh, and issue template"
               git push origin "HEAD:${TARGET_BRANCH}"
@@ -83,7 +106,8 @@ jobs:
           EXISTING=$(gh issue list --repo "$TARGET_REPO" --label agentic-ready --state open --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             echo "Found existing agentic-ready issue #$EXISTING — adding a comment instead of creating a new issue."
-            gh issue comment --repo "$TARGET_REPO" "$EXISTING" --body "Installer run detected — reusing this issue to trigger the AgentReady transform."
+            gh issue comment --repo "$TARGET_REPO" "$EXISTING" \
+              --body "Installer run detected — reusing this issue to trigger the AgentReady transform."
           else
             echo "No existing agentic-ready issue found — creating a new one."
             gh issue create \
@@ -102,9 +126,12 @@ jobs:
           echo ""
           echo "Installed files:"
           echo "  • .github/workflows/agentic-ready.yml       — issue trigger"
-          echo "  • .github/workflows/context-refresh.yml    — weekly drift detection"
-          echo "  • .github/ISSUE_TEMPLATE/agentic-ready.yml — pre-filled issue form"
+          echo "  • .github/workflows/context-refresh.yml     — weekly drift detection"
+          echo "  • .github/ISSUE_TEMPLATE/agentic-ready.yml  — pre-filled issue form"
           echo ""
           echo "✅ Issue created automatically!"
           echo "   The agentic-ready workflow should now be running."
           echo "   Check: https://github.com/$TARGET_REPO/actions"
+          echo ""
+          echo "ℹ️  Note: ANTHROPIC_API_KEY only needs to exist in agent-ready."
+          echo "   Target repos do not need any secrets configured."
