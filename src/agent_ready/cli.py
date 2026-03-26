@@ -403,8 +403,23 @@ class AgenticGenerator:
         self._generate_system_prompt()
         self._generate_mcp_json()
         self._generate_tool_templates()
+        self._generate_openai_agent()
+        self._generate_gemini_agent()
         self._generate_memory_schema()
         return self.generated
+    def _generate_openai_agent(self) -> None:
+        """Generate OpenAI agent entry point."""
+        template_path = TEMPLATES_DIR / "openai_agent.template.py"
+        if template_path.exists():
+            content = template_path.read_text(encoding="utf-8")
+            self._write_file("agents/openai_agent.py", content)
+
+    def _generate_gemini_agent(self) -> None:
+        """Generate Gemini agent entry point."""
+        template_path = TEMPLATES_DIR / "gemini_agent.template.yaml"
+        if template_path.exists():
+            content = template_path.read_text(encoding="utf-8")
+            self._write_file("agents/gemini_agent.yaml", content)
 
     def generate_only(self, category: str) -> list[tuple[str, str]]:
         """Generate only specific category."""
