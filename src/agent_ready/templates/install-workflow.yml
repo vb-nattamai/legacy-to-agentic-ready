@@ -3,15 +3,47 @@ on:
   issues:
     types: [opened, labeled]
 jobs:
-  transform:
+  check-permission:
     if: |
       contains(github.event.issue.title, '[agentic-ready]') ||
       contains(github.event.issue.labels.*.name, 'agentic-ready')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+    outputs:
+      allowed: ${{ steps.check.outputs.allowed }}
+    steps:
+      - name: Check actor is a repo collaborator
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor
+            });
+            const allowed = ['admin', 'write', 'maintain'];
+            if (!allowed.includes(perm.permission)) {
+              core.setFailed(`@${context.actor} does not have write access. Skipped.`);
+              core.setOutput('allowed', 'false');
+            } else {
+              core.setOutput('allowed', 'true');
+            }
+
+  transform:
+    needs: check-permission
+    if: needs.check-permission.outputs.allowed == 'true'
     permissions:
       contents: write
       pull-requests: write
       issues: write
     uses: vb-nattamai/agent-ready/.github/workflows/reusable-transformer.yml@main
     with:
+      target_repo: ${{ github.repository }}
+      target_branch: ${{ github.event.repository.default_branch }}
       issue_number: ${{ github.event.issue.number }}
+      llm: false
+      force: false
+      only: ''
     secrets: inherit
