@@ -1,4 +1,3 @@
-
 # AgentReady
 
 [![Version](https://img.shields.io/github/v/release/vb-nattamai/agent-ready)](https://github.com/vb-nattamai/agent-ready/releases)
@@ -986,7 +985,7 @@ The transformer can auto-generate the file structure but cannot read your mind �
   ⬜ OpenAPI spec                      +0   ← optional
   ✅ CI config exists                  +5
   ─────────────────────────────────────
-  💡 Add openapi.yaml to reach 100/100
+  💡 Add openapi.yml to reach 100/100
 ──────────────────────────────────────
 ```
 
