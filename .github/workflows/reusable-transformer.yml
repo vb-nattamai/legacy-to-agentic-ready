@@ -122,9 +122,15 @@ jobs:
           git checkout -b "$BRANCH_NAME"
           echo ".agentic-toolkit" >> .git/info/exclude
           git add -A
-          git commit -m "feat: add agentic-ready scaffolding [skip ci]"
-          git push origin "$BRANCH_NAME"
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          # Only commit if there are staged changes (avoid failing when nothing to commit)
+          if git diff --cached --quiet; then
+            echo "No changes to commit; skipping push."
+            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          else
+            git commit -m "feat: add agentic-ready scaffolding [skip ci]"
+            git push origin "$BRANCH_NAME"
+            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          fi
 
       - name: Create Pull Request
         if: steps.transform.outputs.generated == 'true'
