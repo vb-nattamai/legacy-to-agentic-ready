@@ -73,6 +73,12 @@ jobs:
           GH_TOKEN: ${{ secrets.INSTALL_TOKEN || github.token }}
           TARGET_REPO: ${{ inputs.target_repo }}
         run: |
+          # Ensure the 'agentic-ready' label exists in the target repo
+          gh label create agentic-ready \
+            --repo "$TARGET_REPO" \
+            --color "4CAF50" \
+            --description "Agentic ready scaffolding" 2>/dev/null || true
+
           # Prefer reusing an existing open issue labeled 'agentic-ready' to avoid duplicates
           EXISTING=$(gh issue list --repo "$TARGET_REPO" --label agentic-ready --state open --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
