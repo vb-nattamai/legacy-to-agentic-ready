@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6] — 2026-03-27
+
+
+### Fixed
+
+- add retry logic for overloaded Anthropic API in analyser
+- use INSTALL_TOKEN directly for pushing to target repository
+- use INSTALL_TOKEN env var explicitly for cross-repo push
+- set PYTHONPATH for agent-ready CLI execution in transformer workflow
+- specify repository and token for agent-ready checkout in transformer workflow
+- add debug step to list workspace contents in reusable transformer workflow
+- run cli.py via absolute GITHUB_WORKSPACE path, install anthropic directly
+- add confirmation message for agent_ready installation in transformer workflow
+- update command to use module syntax for agent-ready CLI
+- update AI dependency installation to use specific version of anthropic
+- use realpath for agent-ready installation path in transformer workflow
+
+---
 ## [2.0.5] — 2026-03-27
 
 
