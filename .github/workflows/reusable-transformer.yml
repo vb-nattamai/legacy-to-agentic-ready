@@ -107,9 +107,7 @@ jobs:
       - name: Install agent-ready with AI dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel build
-          AGENT_READY_PATH="$(realpath "$GITHUB_WORKSPACE/agent-ready")"
           pip install anthropic>=0.40.0 -q
-          python -c "import agent_ready; print('agent_ready installed at:', agent_ready.__file__)"
 
       - name: Configure git for target repo
         run: |
@@ -120,29 +118,24 @@ jobs:
       - name: Run transformer against target repo
         id: transform
         env:
-          # ANTHROPIC_API_KEY lives only in agent-ready — never needed in target repos
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
-          # Build the transformer command
-          CMD="python -m agent_ready.cli --target ./target-repo"
-          [ -n "${{ inputs.only }}" ]          && CMD="$CMD --only ${{ inputs.only }}"
-          [ "${{ inputs.force }}" = "true" ]   && CMD="$CMD --force"
-          [ "${{ inputs.llm }}"   = "true" ]   && CMD="$CMD --llm"
+          CMD="python $GITHUB_WORKSPACE/agent-ready/src/agent_ready/cli.py --target ./target-repo"
+          [ -n "${{ inputs.only }}" ]        && CMD="$CMD --only ${{ inputs.only }}"
+          [ "${{ inputs.force }}" = "true" ] && CMD="$CMD --force"
+          [ "${{ inputs.llm }}"   = "true" ] && CMD="$CMD --llm"
 
           echo "Running: $CMD"
           echo ""
           $CMD
 
-          # Check if the target repo has new or modified files
           cd target-repo
           if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
             echo "generated=false" >> $GITHUB_OUTPUT
-            echo "✅ Already up to date — nothing to commit"
           else
             echo "generated=true" >> $GITHUB_OUTPUT
-            echo "✅ Files generated"
           fi
 
       - name: Create branch and commit in target repo
