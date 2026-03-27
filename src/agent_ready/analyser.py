@@ -267,7 +267,9 @@ def analyse(
                 messages=[{"role": "user", "content": prompt}],
             )
             break
-        except anthropic.OverloadedError as e:
+        except anthropic.APIStatusError as e:
+            if e.status_code != 529:
+                raise
             last_error = e
             if attempt < 2:
                 wait = 30 * (attempt + 1)
