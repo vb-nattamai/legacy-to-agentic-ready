@@ -98,6 +98,15 @@ jobs:
           token: ${{ secrets.INSTALL_TOKEN || github.token }}
           path: target-repo
           fetch-depth: 0
+    
+
+      - name: Debug — list workspace contents       
+        run: |
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          echo "--- agent-ready contents ---"
+          find agent-ready -type f | head -30
+          echo "--- target-repo contents ---"
+          find target-repo -type f | head -10
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
