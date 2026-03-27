@@ -169,7 +169,7 @@ jobs:
             echo "No staged changes — skipping commit."
           else
             git commit -m "feat: add agentic-ready scaffolding [skip ci]"
-            git push "https://x-access-token:${{ secrets.INSTALL_TOKEN || github.token }}@github.com/${{ inputs.target_repo }}.git" "$BRANCH_NAME"
+            git push "https://x-access-token:${INSTALL_TOKEN}@github.com/${{ inputs.target_repo }}.git" "$BRANCH_NAME"
           fi
 
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
