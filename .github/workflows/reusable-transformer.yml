@@ -152,6 +152,8 @@ jobs:
 
       - name: Create branch and commit in target repo
         if: steps.transform.outputs.generated == 'true'
+        env:
+          INSTALL_TOKEN: ${{ secrets.INSTALL_TOKEN }}
         run: |
           cd target-repo
 
