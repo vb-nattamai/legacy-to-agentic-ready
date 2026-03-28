@@ -1,0 +1,64 @@
+name: Test — Push Permission Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repo to test push access (e.g. vb-nattamai/springboot-test)'
+        required: true
+        type: string
+
+jobs:
+  test-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check INSTALL_TOKEN is set
+        run: |
+          if [ -z "${{ secrets.INSTALL_TOKEN }}" ]; then
+            echo "❌ INSTALL_TOKEN is not set"
+            exit 1
+          fi
+          echo "✅ INSTALL_TOKEN is set"
+
+      - name: Checkout target repo using INSTALL_TOKEN
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.target_repo }}
+          token: ${{ secrets.INSTALL_TOKEN }}
+          path: target-repo
+
+      - name: Verify checkout succeeded
+        run: |
+          echo "✅ Checkout succeeded"
+          ls target-repo
+
+      - name: Configure git
+        run: |
+          cd target-repo
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Create test branch and push
+        env:
+          INSTALL_TOKEN: ${{ secrets.INSTALL_TOKEN }}
+        run: |
+          cd target-repo
+          BRANCH="test/push-permission-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          echo "push permission test" > .push-test.txt
+          git add .push-test.txt
+          git commit -m "test: verify push permission [skip ci]"
+          git push "https://x-access-token:${INSTALL_TOKEN}@github.com/${{ inputs.target_repo }}.git" "$BRANCH"
+          echo "✅ Push succeeded to ${{ inputs.target_repo }} on branch $BRANCH"
+
+      - name: Clean up test branch
+        env:
+          INSTALL_TOKEN: ${{ secrets.INSTALL_TOKEN }}
+        run: |
+          cd target-repo
+          BRANCH=$(git branch --show-current)
+          git push "https://x-access-token:${INSTALL_TOKEN}@github.com/${{ inputs.target_repo }}.git" --delete "$BRANCH" 2>/dev/null || true
+          echo "✅ Test branch deleted"
