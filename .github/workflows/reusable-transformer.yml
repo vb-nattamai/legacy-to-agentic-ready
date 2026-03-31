@@ -28,6 +28,16 @@ on:
         required: false
         default: false
         type: boolean
+      eval:
+        description: 'Run evaluation after transformation to measure context file quality'
+        required: false
+        default: false
+        type: boolean
+      fail_level:
+        description: 'Fail if eval pass rate is below this threshold (0.0-1.0). Use as CI gate.'
+        required: false
+        default: '0.0'
+        type: string
       issue_number:
         description: 'Issue number in the target repo to close after PR is opened'
         required: false
@@ -61,6 +71,16 @@ on:
         required: false
         default: false
         type: boolean
+      eval:
+        description: 'Run evaluation after transformation to measure context file quality'
+        required: false
+        default: false
+        type: boolean
+      fail_level:
+        description: 'Fail if eval pass rate is below this threshold (0.0-1.0). Use as CI gate.'
+        required: false
+        default: '0.0'
+        type: string
       issue_number:
         description: 'Issue number in the target repo to close after PR is opened'
         required: false
@@ -82,9 +102,11 @@ jobs:
             exit 1
           fi
           echo "✅ Target: ${{ inputs.target_repo }}@${{ inputs.target_branch }}"
-          echo "   LLM mode: ${{ inputs.llm }}"
-          echo "   Only:     ${{ inputs.only || 'all' }}"
-          echo "   Force:    ${{ inputs.force }}"
+          echo "   LLM mode:   ${{ inputs.llm }}"
+          echo "   Eval mode:  ${{ inputs.eval }}"
+          echo "   Fail level: ${{ inputs.fail_level }}"
+          echo "   Only:       ${{ inputs.only || 'all' }}"
+          echo "   Force:      ${{ inputs.force }}"
 
       - name: Checkout agent-ready (this repo — contains the transformer)
         uses: actions/checkout@v4
@@ -100,15 +122,6 @@ jobs:
           token: ${{ secrets.INSTALL_TOKEN || github.token }}
           path: target-repo
           fetch-depth: 0
-    
-
-      - name: Debug — list workspace contents       
-        run: |
-          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-          echo "--- agent-ready contents ---"
-          find agent-ready -type f | head -30
-          echo "--- target-repo contents ---"
-          find target-repo -type f | head -10
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
@@ -135,9 +148,11 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/agent-ready/src
         run: |
           CMD="python $GITHUB_WORKSPACE/agent-ready/src/agent_ready/cli.py --target ./target-repo"
-          [ -n "${{ inputs.only }}" ]        && CMD="$CMD --only ${{ inputs.only }}"
-          [ "${{ inputs.force }}" = "true" ] && CMD="$CMD --force"
-          [ "${{ inputs.llm }}"   = "true" ] && CMD="$CMD --llm"
+          [ -n "${{ inputs.only }}" ]             && CMD="$CMD --only ${{ inputs.only }}"
+          [ "${{ inputs.force }}"      = "true" ] && CMD="$CMD --force"
+          [ "${{ inputs.llm }}"        = "true" ] && CMD="$CMD --llm"
+          [ "${{ inputs.eval }}"       = "true" ] && CMD="$CMD --eval"
+          [ "${{ inputs.fail_level }}" != "0.0" ] && CMD="$CMD --fail-level ${{ inputs.fail_level }}"
 
           echo "Running: $CMD"
           echo ""
@@ -184,13 +199,11 @@ jobs:
           TARGET_REPO="${{ inputs.target_repo }}"
           TARGET_BRANCH="${{ inputs.target_branch }}"
 
-          # Create label (ignore error if it already exists)
           gh label create agentic-ready \
             --repo "$TARGET_REPO" \
             --color "4CAF50" \
             --description "Agentic ready scaffolding" 2>/dev/null || true
 
-          # Only create a PR if the branch was actually pushed
           if git -C target-repo ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
             echo "Branch $BRANCH_NAME found on origin — creating PR."
 

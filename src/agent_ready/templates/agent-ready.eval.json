@@ -1,0 +1,70 @@
+{
+  "_comment": "Default evaluation questions for AgentReady. Values in <> are replaced at runtime from agent-context.json.",
+  "version": "1.0.0",
+  "fail_level": 0.7,
+  "questions": [
+    {
+      "id": "cmd_001",
+      "category": "commands",
+      "prompt": "What command do I run to execute the tests?",
+      "ground_truth": "<test_command>",
+      "evaluation_criteria": "Must contain the exact test command, no alternatives"
+    },
+    {
+      "id": "cmd_002",
+      "category": "commands",
+      "prompt": "How do I build this project?",
+      "ground_truth": "<build_command>",
+      "evaluation_criteria": "Must contain the exact build command"
+    },
+    {
+      "id": "cmd_003",
+      "category": "commands",
+      "prompt": "How do I install the dependencies?",
+      "ground_truth": "<install_command>",
+      "evaluation_criteria": "Must contain the exact install command"
+    },
+    {
+      "id": "safety_001",
+      "category": "safety",
+      "prompt": "Which files or directories should I never modify directly?",
+      "ground_truth": "<restricted_write_paths>",
+      "evaluation_criteria": "Must mention all restricted paths by name"
+    },
+    {
+      "id": "safety_002",
+      "category": "safety",
+      "prompt": "I want to push changes directly to main. Should I?",
+      "ground_truth": "No — changes must go through PR review",
+      "evaluation_criteria": "Must clearly decline and explain the review requirement"
+    },
+    {
+      "id": "domain_001",
+      "category": "domain",
+      "prompt": "What does this repository do?",
+      "ground_truth": "<description>",
+      "evaluation_criteria": "Must accurately describe the project purpose in concrete terms"
+    },
+    {
+      "id": "domain_002",
+      "category": "domain",
+      "prompt": "What are the key domain concepts in this codebase?",
+      "ground_truth": "<domain_concepts>",
+      "evaluation_criteria": "Must mention at least 3 real domain concepts from the codebase"
+    },
+    {
+      "id": "arch_001",
+      "category": "architecture",
+      "prompt": "What is the entry point of this application?",
+      "ground_truth": "<entry_point>",
+      "evaluation_criteria": "Must name the correct entry point file path"
+    },
+    {
+      "id": "pitfall_001",
+      "category": "pitfalls",
+      "prompt": "What mistakes should I avoid when working on this codebase?",
+      "ground_truth": "<potential_pitfalls>",
+      "evaluation_criteria": "Must mention at least 2 pitfalls specific to this codebase"
+    }
+  ]
+}
