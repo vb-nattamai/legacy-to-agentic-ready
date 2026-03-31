@@ -1,0 +1,82 @@
+name: AgentReady — Context Drift Detection
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
+  workflow_dispatch:       # Manual trigger from Actions tab
+  workflow_call:           # Callable from target repos
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout agent-ready transformer
+        uses: actions/checkout@v4
+        with:
+          repository: vb-nattamai/agent-ready
+          token: ${{ secrets.INSTALL_TOKEN || github.token }}
+          path: .agent-ready
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build
+          pip install anthropic>=0.40.0 -q
+
+      - name: Run context-only refresh
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.agent-ready/src
+        run: |
+          python .agent-ready/src/agent_ready/cli.py \
+            --target . --only context --force --quiet
+
+      - name: Detect meaningful drift
+        id: drift
+        run: |
+          # Ignore last_scanned — changes every run and is not meaningful drift.
+          # Only open a PR if structural content changed (commands, layout, languages, etc.)
+          MEANINGFUL_DIFF=$(git diff agent-context.json \
+            | grep -v '"last_scanned"' \
+            | grep -E '^[+-][^+-]' || true)
+          if [ -z "$MEANINGFUL_DIFF" ]; then
+            echo "drifted=false" >> $GITHUB_OUTPUT
+            echo "✅ No structural drift detected."
+          else
+            echo "drifted=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Structural drift detected in agent-context.json."
+          fi
+
+      - name: Open drift PR
+        if: steps.drift.outputs.drifted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.INSTALL_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="agentic-ready/context-drift-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add agent-context.json
+          git commit -m "chore: update agent-context.json — drift detected [skip ci]"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "🤖 Agent context drift detected — review required" \
+            --body-file .agent-ready/.github/DRIFT_PR_TEMPLATE.md \
+            --label "agentic-ready" \
+            --base main
+
+      - name: No drift detected
+        if: steps.drift.outputs.drifted == 'false'
+        run: echo "✅ agent-context.json is up to date. No PR needed."
