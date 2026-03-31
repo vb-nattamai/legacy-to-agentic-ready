@@ -1,4 +1,4 @@
-name: Test — Push Permission Check
+name: Dev — Validate INSTALL_TOKEN Permissions
 
 on:
   workflow_dispatch:
