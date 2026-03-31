@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import random
 import time
 from pathlib import Path
 from typing import Any
@@ -32,8 +33,8 @@ import anthropic
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
-EVAL_MODEL = "claude-sonnet-4-6"
-JUDGE_MODEL = "claude-sonnet-4-6"
+EVAL_MODEL = "claude-haiku-4-5-20251001"
+JUDGE_MODEL = "claude-haiku-4-5-20251001"
 
 # ── Question categories ───────────────────────────────────────────────────────
 
@@ -126,6 +127,37 @@ Respond ONLY with a valid JSON object. No markdown, no preamble.\
 """
 
 
+# ── Retry helper ──────────────────────────────────────────────────────────────
+
+def _api_call_with_retry(
+    client: anthropic.Anthropic,
+    max_retries: int = 5,
+    wait_base: int = 30,
+    **kwargs: Any,
+) -> Any:
+    """
+    Call client.messages.create with retry logic for 529 overloaded errors.
+    Retries up to max_retries times with increasing waits + jitter.
+    """
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return client.messages.create(**kwargs)
+        except anthropic.APIStatusError as e:
+            if e.status_code != 529:
+                raise
+            last_error = e
+            if attempt < max_retries - 1:
+                wait = (wait_base * (attempt + 1)) + random.uniform(0, 5)
+                print(f"  ⚠️  API overloaded, retrying in {int(wait)}s... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                raise last_error
+    raise last_error  # unreachable but satisfies type checker
+
+
+# ── Judge ─────────────────────────────────────────────────────────────────────
+
 def _judge_response(
     client: anthropic.Anthropic,
     question: dict[str, Any],
@@ -133,7 +165,6 @@ def _judge_response(
     has_context: bool,
 ) -> dict[str, Any]:
     """Ask the judge model to score a single response."""
-
     prompt = f"""Evaluate this AI response against the ground truth.
 
 Question: {question["prompt"]}
@@ -151,7 +182,10 @@ Score this response and return JSON:
   "hallucinated": <true if response contains invented file paths or class names not in ground truth>
 }}"""
 
-    result = client.messages.create(
+    result = _api_call_with_retry(
+        client,
+        max_retries=5,
+        wait_base=30,
         model=JUDGE_MODEL,
         max_tokens=256,
         system=JUDGE_SYSTEM,
@@ -194,7 +228,10 @@ Generate exactly 9 questions — one per category pattern shown above.
 Use ACTUAL values from the context (real commands, real paths, real domain concepts).
 Do not use placeholder values."""
 
-    response = client.messages.create(
+    response = _api_call_with_retry(
+        client,
+        max_retries=5,
+        wait_base=30,
         model=EVAL_MODEL,
         max_tokens=2048,
         system=QUESTION_GEN_SYSTEM,
@@ -232,7 +269,7 @@ def _ask(
     if system:
         kwargs["system"] = system
 
-    response = client.messages.create(**kwargs)
+    response = _api_call_with_retry(client, max_retries=5, wait_base=30, **kwargs)
     return response.content[0].text.strip()
 
 
@@ -289,17 +326,6 @@ def run_eval(
       4. Judge both responses
       5. Calculate improvement delta
       6. Return full results
-
-    Args:
-        target:     Path to the repository
-        client:     Anthropic client
-        questions:  Optional pre-loaded question list (auto-generated if None)
-        fail_level: Float 0.0-1.0 — raise EvalFailedError if pass_rate < fail_level
-        quiet:      Suppress output
-
-    Returns:
-        dict with keys: questions, results, baseline_score, context_score,
-                        improvement, pass_rate, passed
     """
     if not quiet:
         print("\n🧪 Running evaluation...")
@@ -338,7 +364,7 @@ def run_eval(
         if not quiet:
             print(f"  [{i+1}/{len(questions)}] {q['category']}: {q['prompt'][:60]}...")
 
-        # Small delay to avoid rate limits
+        # Small delay between calls to avoid rate limits
         time.sleep(1)
 
         # Pass 1: without context (baseline)
@@ -450,13 +476,13 @@ def _print_summary(result: dict[str, Any]) -> None:
     print("──────────────────────────────────────────────")
     print("  EVALUATION RESULTS")
     print("──────────────────────────────────────────────")
-    print(f"  Baseline score (no context):    {result['baseline_score']}/10")
-    print(f"  With context score:             {result['context_score']}/10")
+    print(f"  Baseline score (no context):     {result['baseline_score']}/10")
+    print(f"  With context score:              {result['context_score']}/10")
     improvement = result["improvement_pct"]
     sign = "+" if improvement >= 0 else ""
-    print(f"  Improvement:                    {sign}{improvement}%")
-    print(f"  Pass rate:                      {int(result['pass_rate'] * 100)}%")
-    print(f"  Hallucination rate (w/ context):{int(result['hallucination_rate'] * 100)}%")
+    print(f"  Improvement:                     {sign}{improvement}%")
+    print(f"  Pass rate:                       {int(result['pass_rate'] * 100)}%")
+    print(f"  Hallucination rate (w/ context): {int(result['hallucination_rate'] * 100)}%")
     print()
     print("  Category breakdown:")
     for cat, scores in result["category_breakdown"].items():
@@ -488,8 +514,8 @@ def save_eval_report(
         "",
         "## Summary",
         "",
-        f"| Metric | Value |",
-        f"|--------|-------|",
+        "| Metric | Value |",
+        "|--------|-------|",
         f"| Baseline score (no context) | {result['baseline_score']}/10 |",
         f"| Score with context files | {result['context_score']}/10 |",
         f"| Improvement | {'+' if result['improvement_pct'] >= 0 else ''}{result['improvement_pct']}% |",
