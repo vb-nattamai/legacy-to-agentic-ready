@@ -7,22 +7,108 @@
 #          Can also be triggered manually from the Actions tab.
 #
 # WHAT IT DOES:
-#   1. Runs the AgentReady transformer in context-only mode against this repo
+#   1. Runs the AgentReady transformer in context-only mode (LLM) against this repo
 #   2. Compares the result to the committed agent-context.json
-#   3. If drift is detected → opens a PR with the updated file for review
-#   4. If no drift       → exits cleanly with no side effects
+#   3. If structural drift is detected → opens a PR with the updated file
+#   4. If no drift → exits cleanly with no side effects
 
-name: AgentReady — Context Refresh
+name: AgentReady — Context Drift Detection
 
 on:
   schedule:
-    - cron: '0 9 * * 1'   # Every Monday at 09:00 UTC
-  workflow_dispatch:        # Allow manual trigger from Actions tab
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
+  workflow_dispatch:       # Manual trigger from Actions tab
 
 jobs:
-  refresh:
+  detect:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    uses: vb-nattamai/agent-ready/.github/workflows/context-drift-detector.yml@main
-    secrets: inherit
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout agent-ready transformer
+        uses: actions/checkout@v4
+        with:
+          repository: vb-nattamai/agent-ready
+          token: ${{ secrets.INSTALL_TOKEN || github.token }}
+          path: .agent-ready
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build
+          pip install anthropic>=0.40.0 -q
+
+      - name: Run context-only refresh (LLM mode)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}/.agent-ready/src
+        run: |
+          python .agent-ready/src/agent_ready/cli.py \
+            --target . --only context --force --quiet --llm
+
+      - name: Detect meaningful drift
+        id: drift
+        run: |
+          # Ignore last_scanned — changes every run and is not meaningful drift.
+          # Only open a PR if structural content changed.
+          MEANINGFUL_DIFF=$(git diff agent-context.json \
+            | grep -v '"last_scanned"' \
+            | grep -E '^[+-][^+-]' || true)
+          if [ -z "$MEANINGFUL_DIFF" ]; then
+            echo "drifted=false" >> $GITHUB_OUTPUT
+            echo "✅ No structural drift detected."
+          else
+            echo "drifted=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Structural drift detected in agent-context.json."
+          fi
+
+      - name: Open drift PR
+        if: steps.drift.outputs.drifted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.INSTALL_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="agentic-ready/context-drift-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add agent-context.json
+          git commit -m "chore: update agent-context.json — drift detected [skip ci]"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "🤖 Agent context drift detected — review required" \
+            --body "## 🤖 Agent Context Drift Detected
+
+The scheduled context refresh found that \`agent-context.json\` no longer
+matches the current state of the repository.
+
+This can happen when:
+- New modules, services, or packages were added
+- Entry points or build commands changed
+- New environment variables were introduced
+- Domain concepts or pitfalls evolved
+
+### What changed
+See the diff in this PR for the exact changes.
+
+### Before merging
+- [ ] Verify \`domain_concepts\` still reflects real terms from the codebase
+- [ ] Verify \`restricted_write_paths\` is still accurate
+- [ ] Verify \`environment_variables\` covers all new vars introduced since last scan
+- [ ] Verify \`potential_pitfalls\` still applies to the current codebase" \
+            --label "agentic-ready" \
+            --base main
+
+      - name: No drift detected
+        if: steps.drift.outputs.drifted == 'false'
+        run: echo "✅ agent-context.json is up to date. No PR needed."

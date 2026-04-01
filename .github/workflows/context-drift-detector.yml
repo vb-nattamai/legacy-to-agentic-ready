@@ -36,10 +36,11 @@ jobs:
 
       - name: Run context-only refresh
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PYTHONPATH: ${{ github.workspace }}/.agent-ready/src
         run: |
           python .agent-ready/src/agent_ready/cli.py \
-            --target . --only context --force --quiet
+            --target . --only context --force --quiet --llm
 
       - name: Detect meaningful drift
         id: drift
