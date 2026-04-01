@@ -33,6 +33,24 @@ SKIP_DIRS = {
     ".gradle", ".sass-cache", "tmp", "temp",
 }
 
+# AgentReady-generated files — skip these during analysis so Opus never reads
+# its own previous output as source code, which causes hallucinations.
+SKIP_AGENT_FILES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "agent-context.json",
+    "system_prompt.md",
+    "mcp.json",
+    "AGENTIC_EVAL.md",
+    "AGENTIC_READINESS.md",
+}
+
+# AgentReady-generated directories — skip entirely
+SKIP_AGENT_DIRS = {
+    "memory",  # memory/schema.md
+    "tools",   # generated tool scaffolds
+}
+
 SOURCE_EXTENSIONS = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs",
     ".java", ".go", ".rs", ".cs", ".rb", ".kt",
@@ -178,7 +196,7 @@ def collect(target: Path, quiet: bool = False) -> dict[str, Any]:
             has_openapi = True
             break
 
-    # Source files — production code only, skip test directories
+    # Source files — production code only, skip test directories and agent files
     test_markers = {"test", "tests", "spec", "__tests__", "fixtures", "mocks"}
     collected = 0
     for ext in SOURCE_EXTENSIONS:
@@ -190,6 +208,12 @@ def collect(target: Path, quiet: bool = False) -> dict[str, Any]:
             if any(skip in f.parts for skip in SKIP_DIRS):
                 continue
             if any(marker in f.parts for marker in test_markers):
+                continue
+            # Skip AgentReady-generated files — prevents Opus reading its own
+            # previous output as source code, which causes hallucinations
+            if f.name in SKIP_AGENT_FILES:
+                continue
+            if any(skip in f.parts for skip in SKIP_AGENT_DIRS):
                 continue
             if f.stat().st_size / 1024 > MAX_FILE_KB:
                 continue
