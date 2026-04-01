@@ -85,11 +85,10 @@ jobs:
           git commit -m "chore: update agent-context.json — drift detected [skip ci]"
           git push origin "$BRANCH"
 
-          gh pr create \
-            --title "🤖 Agent context drift detected — review required" \
-            --body "## 🤖 Agent Context Drift Detected
+          cat > /tmp/pr_body.txt <<'PRBODY'
+## Agent Context Drift Detected
 
-The scheduled context refresh found that \`agent-context.json\` no longer
+The scheduled context refresh found that `agent-context.json` no longer
 matches the current state of the repository.
 
 This can happen when:
@@ -102,10 +101,15 @@ This can happen when:
 See the diff in this PR for the exact changes.
 
 ### Before merging
-- [ ] Verify \`domain_concepts\` still reflects real terms from the codebase
-- [ ] Verify \`restricted_write_paths\` is still accurate
-- [ ] Verify \`environment_variables\` covers all new vars introduced since last scan
-- [ ] Verify \`potential_pitfalls\` still applies to the current codebase" \
+- [ ] Verify `domain_concepts` still reflects real terms from the codebase
+- [ ] Verify `restricted_write_paths` is still accurate
+- [ ] Verify `environment_variables` covers all new vars introduced since last scan
+- [ ] Verify `potential_pitfalls` still applies to the current codebase
+PRBODY
+
+          gh pr create \
+            --title "Agent context drift detected — review required" \
+            --body-file /tmp/pr_body.txt \
             --label "agentic-ready" \
             --base main
 
