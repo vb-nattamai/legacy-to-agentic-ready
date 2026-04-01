@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] — 2026-04-01
+
+
+### Fixed
+
+- update context-drift-detector template to reference renamed workflow
+
+### Changed
+
+- docs: rewrite automation.md for v2.0 — LLM mode, eval framework, labeled-only trigger universal prompt for v2.0 — LLM-first, no templates, pitfalls emphasis
+
+---
 ## [2.3.3] — 2026-04-01
 
 
