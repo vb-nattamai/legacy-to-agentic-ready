@@ -83,7 +83,7 @@ jobs:
           fi
 
           # Weekly context drift detector — opens a PR if agent-context.json drifts
-          cp ../toolkit/src/agent_ready/templates/context-refresh-workflow.yml \
+          cp ../toolkit/src/agent_ready/templates/context-drift-detector-workflow.yml \
              .github/workflows/context-drift-detector.yml
 
           # Issue form template — pre-fills title + checklist so trigger always fires correctly
