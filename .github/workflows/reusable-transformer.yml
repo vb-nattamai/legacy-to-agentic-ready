@@ -23,13 +23,13 @@ on:
         required: false
         default: false
         type: boolean
-      llm:
-        description: 'Use LLM-first mode (Claude Opus analysis + Sonnet generation)'
+      provider:
+        description: 'LLM provider preset: anthropic | openai | google | groq | mistral | together | ollama'
         required: false
-        default: false
-        type: boolean
+        default: 'anthropic'
+        type: string
       eval:
-        description: 'Run evaluation after transformation to measure context file quality'
+        description: 'Run evaluation after transformation and save AGENTIC_EVAL.md'
         required: false
         default: false
         type: boolean
@@ -66,13 +66,13 @@ on:
         required: false
         default: false
         type: boolean
-      llm:
-        description: 'Use LLM-first mode (Claude Opus analysis + Sonnet generation)'
+      provider:
+        description: 'LLM provider preset: anthropic | openai | google | groq | mistral | together | ollama'
         required: false
-        default: false
-        type: boolean
+        default: 'anthropic'
+        type: string
       eval:
-        description: 'Run evaluation after transformation to measure context file quality'
+        description: 'Run evaluation after transformation and save AGENTIC_EVAL.md'
         required: false
         default: false
         type: boolean
@@ -130,8 +130,8 @@ jobs:
 
       - name: Install agent-ready with AI dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel build
-          pip install anthropic>=0.40.0 -q
+          python -m pip install --upgrade pip
+          pip install -e 'agent-ready[ai]' -q
 
       - name: Configure git for target repo
         run: |
@@ -150,7 +150,7 @@ jobs:
           CMD="python $GITHUB_WORKSPACE/agent-ready/src/agent_ready/cli.py --target ./target-repo"
           [ -n "${{ inputs.only }}" ]             && CMD="$CMD --only ${{ inputs.only }}"
           [ "${{ inputs.force }}"      = "true" ] && CMD="$CMD --force"
-          [ "${{ inputs.llm }}"        = "true" ] && CMD="$CMD --llm"
+          [ -n "${{ inputs.provider }}" ]         && CMD="$CMD --provider ${{ inputs.provider }}"
           [ "${{ inputs.eval }}"       = "true" ] && CMD="$CMD --eval"
           [ "${{ inputs.fail_level }}" != "0.0" ] && CMD="$CMD --fail-level ${{ inputs.fail_level }}"
 

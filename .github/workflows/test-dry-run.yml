@@ -1,6 +1,6 @@
 name: Test — Agentic Ready (Dry Run)
 # Manually trigger from Actions tab to preview changes before committing
-# No files are written, no API calls made, pure preview mode
+# No files are written. Requires an API key to run the LLM analysis.
 
 on:
   workflow_dispatch:
@@ -8,10 +8,15 @@ on:
       target_repo:
         description: "Target repo to preview (owner/repo). Leave as '.' to smoke-test agent-ready itself."
         required: false
-        default: .
+        default: '.'
+        type: string
+      provider:
+        description: 'LLM provider preset: anthropic | openai | google | groq | mistral | together | ollama'
+        required: false
+        default: 'anthropic'
         type: string
       verify:
-        description: Verify generated context with Claude Haiku
+        description: Verify generated context with the evaluation model
         required: false
         default: false
         type: boolean
@@ -42,56 +47,58 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install agent-ready
+      - name: Install agent-ready with AI dependencies
         run: |
-          cd toolkit
-          pip install --upgrade pip setuptools wheel build
-          pip install .
+          python -m pip install --upgrade pip
+          pip install -e 'toolkit[ai]' -q
 
       - name: Run transformer in dry-run mode (no files written)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
         run: |
-          cd toolkit
           if [ "${{ github.event.inputs.target_repo }}" = "." ]; then
-            TARGET_PATH="."
+            TARGET_PATH="toolkit"
           else
-            TARGET_PATH="../target"
+            TARGET_PATH="target"
           fi
 
-          echo "🔍 Analyzing repository: $TARGET_PATH"
-          echo "📋 Dry-run mode enabled (no files will be written)"
+          echo "🔍 Analyzing: $TARGET_PATH"
+          echo "🤖 Provider:  ${{ github.event.inputs.provider || 'anthropic' }}"
+          echo "📋 Dry-run mode — no files will be written"
           echo ""
 
-          python scripts/run_transformer.py \
+          python -m agent_ready.cli \
             --target "$TARGET_PATH" \
-            --dry-run \
-            --verbose
-        env:
-          # Optional: only needed for --verify flag
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+            --provider "${{ github.event.inputs.provider || 'anthropic' }}" \
+            --dry-run
 
       - name: Run verification (optional)
         if: github.event.inputs.verify == 'true'
-        run: |
-          cd toolkit
-          if [ "${{ github.event.inputs.target_repo }}" = "." ]; then
-            TARGET_PATH="."
-          else
-            TARGET_PATH="../target"
-          fi
-
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "⚠️  ANTHROPIC_API_KEY not set, skipping verification"
-            exit 0
-          fi
-
-          echo "✅ Verifying generated context with Claude Haiku..."
-          python scripts/run_transformer.py \
-            --target "$TARGET_PATH" \
-            --dry-run \
-            --verify
-        continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.target_repo }}" = "." ]; then
+            TARGET_PATH="toolkit"
+          else
+            TARGET_PATH="target"
+          fi
+
+          echo "✅ Verifying generated context..."
+          python -m agent_ready.cli \
+            --target "$TARGET_PATH" \
+            --provider "${{ github.event.inputs.provider || 'anthropic' }}" \
+            --verify
+        continue-on-error: true
 
       - name: Summary
         if: always()
@@ -101,12 +108,9 @@ jobs:
           echo "✅ Dry-run Complete"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
+          echo "Provider used: ${{ github.event.inputs.provider || 'anthropic' }}"
           echo "📋 Preview above shows what would be generated."
           echo ""
-          echo "Next steps:"
-          echo "  1. Review the output above"
-          echo "  2. If satisfied, open an issue to trigger real transformation:"
-          echo "     Title: '[agentic-ready] Transform this repo'"
-          echo "  3. Or manually run:"
-          echo "     python scripts/run_transformer.py --target /path/to/repo"
+          echo "To run for real:"
+          echo "  agent-ready --target /path/to/repo --provider ${{ github.event.inputs.provider || 'anthropic' }}"
           echo ""

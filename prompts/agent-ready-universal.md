@@ -5,8 +5,10 @@
 >
 > For the best results, use the automated pipeline:
 > [github.com/vb-nattamai/agent-ready](https://github.com/vb-nattamai/agent-ready)
-> It uses Claude Opus for analysis and Claude Sonnet for generation — producing
-> significantly better output than any single-pass prompt.
+> It uses a tiered LLM strategy — a capable analysis model reads your code and a
+> generation model writes every file from scratch — producing significantly better
+> output than any single-pass prompt. Supported providers: Anthropic, OpenAI,
+> Google, Groq, Mistral, Together AI, and Ollama.
 
 ---
 

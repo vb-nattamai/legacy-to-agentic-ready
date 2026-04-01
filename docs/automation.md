@@ -10,7 +10,7 @@ The fastest path is the one-click installer:
 
 1. Go to [agent-ready Actions → Install AgentReady to Target Repository](https://github.com/vb-nattamai/agent-ready/actions/workflows/install-to-target-repo.yml)
 2. Click **Run workflow**
-3. Enter your target repo (`owner/repo`), enable LLM and eval modes
+3. Enter your target repo (`owner/repo`), choose your LLM provider, and optionally enable eval
 4. Done — the installer pushes the trigger workflow, opens an issue, and the transformation starts automatically
 
 ---
@@ -74,9 +74,9 @@ jobs:
       target_repo: ${{ github.repository }}
       target_branch: ${{ github.event.repository.default_branch }}
       issue_number: ${{ github.event.issue.number }}
-      llm: true          # Claude Opus analyses code, Sonnet writes files
-      eval: true         # Claude Haiku measures whether context files actually help
-      fail_level: '0.0'  # set e.g. '0.8' to gate on eval pass rate
+      provider: 'anthropic'  # or: openai, google, groq, mistral, together, ollama
+      eval: true             # measures whether context files actually help
+      fail_level: '0.0'      # set e.g. '0.8' to gate on eval pass rate
       force: false
       only: ''
     secrets: inherit
@@ -91,13 +91,13 @@ Label added to issue
     │
     ├─ 1. Checks actor has write access to the repo
     ├─ 2. Calls reusable-transformer.yml in agent-ready
-    ├─ 3. Claude Opus analyses your codebase (~60s)
+    ├─ 3. Analysis model reads your codebase (~60s)
     │      — reads source files, config, CI, README
     │      — extracts domain concepts, entry points, env vars, pitfalls
-    ├─ 4. Claude Sonnet writes all scaffolding files from scratch
+    ├─ 4. Generation model writes all scaffolding files from scratch
     │      — AGENTS.md, CLAUDE.md, agent-context.json
     │      — system_prompt.md, mcp.json, memory/schema.md
-    ├─ 5. Claude Haiku evaluates whether context files improve AI responses
+    ├─ 5. Evaluation model measures whether context files improve AI responses
     │      — 9 questions, with and without context
     │      — saves AGENTIC_EVAL.md with per-question results
     ├─ 6. Opens a PR: "🤖 Add agentic-ready scaffolding"
@@ -123,11 +123,17 @@ Label added to issue
 
 ## Model Strategy
 
-| Phase | Model | Why |
-|-------|-------|-----|
-| Analysis | Claude Opus | Deepest reasoning over complex code |
-| Generation | Claude Sonnet | Best structured writing quality |
-| Evaluation | Claude Haiku | 36 API calls — speed and cost matter |
+AgentReady uses a tiered model strategy within each provider — analysis uses the most capable model, evaluation uses the cheapest.
+
+| Provider | Analysis | Generation | Evaluation | Secret |
+|---|---|---|---|---|
+| `anthropic` | claude-opus-4-6 | claude-sonnet-4-6 | claude-haiku-4-5 | `ANTHROPIC_API_KEY` |
+| `openai` | gpt-5.4 | gpt-5.4-mini | gpt-5.4-nano | `OPENAI_API_KEY` |
+| `google` | gemini-2.5-pro | gemini-2.5-pro | gemini-2.5-flash-lite | `GOOGLE_API_KEY` |
+| `groq` | llama-3.3-70b | llama-3.3-70b | llama-3.1-8b-instant | `GROQ_API_KEY` |
+| `mistral` | mistral-large | mistral-large | mistral-small | `MISTRAL_API_KEY` |
+| `together` | Qwen3.5-397B | Llama-3.3-70B | Qwen3.5-9B | `TOGETHER_API_KEY` |
+| `ollama` | llama3.3 | llama3.3 | llama3.2 | _(local — no key)_ |
 
 ---
 
@@ -146,12 +152,18 @@ Or re-label an existing closed issue — same effect.
 
 ## Required Secrets
 
-Add these to your target repo under Settings → Secrets and variables → Actions:
+Add the secret for your chosen provider to your target repo under Settings → Secrets and variables → Actions:
 
-| Secret | Required for | Description |
-|--------|-------------|-------------|
-| `ANTHROPIC_API_KEY` | LLM mode | Claude Opus + Sonnet + Haiku |
-| `INSTALL_TOKEN` | Push access | PAT with `repo` + `workflow` scopes |
+| Secret | Provider | Description |
+|--------|----------|-------------|
+| `ANTHROPIC_API_KEY` | `anthropic` (default) | Claude Opus + Sonnet + Haiku |
+| `OPENAI_API_KEY` | `openai` | GPT-5.4 / mini / nano |
+| `GOOGLE_API_KEY` | `google` | Gemini 2.5 Pro / Flash |
+| `GROQ_API_KEY` | `groq` | Llama 3.3 70B / 3.1 8B |
+| `MISTRAL_API_KEY` | `mistral` | Mistral Large / Small |
+| `TOGETHER_API_KEY` | `together` | Qwen3.5 / Llama-3.3 |
+| _(none)_ | `ollama` | Runs locally — no secret needed |
+| `INSTALL_TOKEN` | all | PAT with `repo` + `workflow` scopes |
 
 ---
 

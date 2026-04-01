@@ -15,13 +15,17 @@ cd agent-ready
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (editable with LLM support)
+pip install -e '.[ai,dev]'
 
-# (Optional) Set up API keys for LLM-enhanced generation
-export ANTHROPIC_API_KEY="sk-ant-..."      # For Claude
-export OPENAI_API_KEY="sk-..."             # For OpenAI
-export GOOGLE_API_KEY="..."                # For Gemini
+# Set up API key for your chosen provider
+export ANTHROPIC_API_KEY="sk-ant-..."   # anthropic (default)
+export OPENAI_API_KEY="sk-..."           # openai
+export GOOGLE_API_KEY="..."              # google
+export GROQ_API_KEY="gsk_..."            # groq
+export MISTRAL_API_KEY="..."             # mistral
+export TOGETHER_API_KEY="..."            # together
+# ollama: no key needed — runs locally
 ```
 
 ## Testing the Transformer
@@ -33,35 +37,40 @@ export GOOGLE_API_KEY="..."                # For Gemini
 cd /tmp
 git clone https://github.com/vb-nattamai/bowling-kata.git
 
-# Run the transformer
+# Run the transformer (dry-run — no files written)
 cd bowling-kata
-python /path/to/agent-ready/scripts/run_transformer.py --target . --dry-run
+agent-ready --target . --dry-run
 
 # Check what would be generated
 ls -la AGENTS.md CLAUDE.md agent-context.json 2>/dev/null || echo "Dry-run: no files written"
 
 # Now generate for real
-python /path/to/agent-ready/scripts/run_transformer.py --target .
+agent-ready --target .
 
 # Verify output
 git diff
 ```
 
-### Test Without API Key
+### Test With a Different Provider
 
 ```bash
-# Works with pure static analysis
-python scripts/run_transformer.py --target /path/to/test/repo
-```
-
-### Test With API Key (LLM-Enhanced)
-
-```bash
-# Set API key first
+# Anthropic (default)
 export ANTHROPIC_API_KEY="sk-ant-..."
+agent-ready --target /path/to/test/repo
 
-# Run with provider flag
-python scripts/run_transformer.py --target /path/to/test/repo --provider anthropic
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+agent-ready --target /path/to/test/repo --provider openai
+
+# Groq (fast, free tier available)
+export GROQ_API_KEY="gsk_..."
+agent-ready --target /path/to/test/repo --provider groq
+
+# Local via Ollama (no API key)
+agent-ready --target /path/to/test/repo --provider ollama
+
+# Any LiteLLM model string
+agent-ready --target /path/to/test/repo --model mistral/mistral-large-latest
 ```
 
 ## Adding a New Language Template
@@ -117,14 +126,14 @@ TOOL_METADATA = {
 }.freeze
 ```
 
-### Step 3: Update the Transformer Script
+### Step 3: Register the Language in the Analyser
 
-Edit `scripts/run_transformer.py` and update:
+Edit `src/agent_ready/analyser.py` and update:
 
-1. **LANGUAGE_EXTENSIONS** dict to include `.rb` → `Ruby`
-2. **FRAMEWORK_INDICATORS** dict if Ruby frameworks should be detected
-3. **lang_to_template** mapping to include `"Ruby": "tool.ruby.template.rb"`
-4. **lang_to_output** mapping to include `"Ruby": "tools/example_tool.rb"`
+1. **`LANGUAGE_EXTENSIONS`** dict to include `.rb` → `"Ruby"`
+2. **`FRAMEWORK_INDICATORS`** dict if Ruby frameworks should be detected
+3. **`lang_to_template`** mapping to include `"Ruby": "tool.ruby.template.rb"`
+4. **`lang_to_output`** mapping to include `"Ruby": "tools/example_tool.rb"`
 
 Example changes:
 
@@ -160,10 +169,10 @@ echo "source 'https://rubygems.org'; gem 'rails'" > /tmp/test-ruby/Gemfile
 echo "puts 'hello'" > /tmp/test-ruby/lib/app.rb
 
 # Run transformer
-python scripts/run_transformer.py --target /tmp/test-ruby --dry-run
+agent-ready --target /tmp/test-ruby --dry-run
 
 # Verify ruby tool was detected
-python scripts/run_transformer.py --target /tmp/test-ruby
+agent-ready --target /tmp/test-ruby
 
 # Check that tools/example_tool.rb was created
 ls -la /tmp/test-ruby/tools/example_tool.rb
@@ -219,9 +228,9 @@ touch templates/CURSOR.template.md
 
 Follow the pattern of `AGENTS.template.md` or `CLAUDE.template.md`.
 
-### Step 4: Update Transformer Script
+### Step 4: Update the Generator
 
-In `scripts/run_transformer.py`, update the `AgenticGenerator.generate_all()` method:
+In `src/agent_ready/generator.py`, update the `generate_all()` method (or equivalent):
 
 ```python
 def generate_all(self) -> list[str]:
@@ -248,16 +257,16 @@ def generate_cursor_md(self) -> None:
 ## Running Tests
 
 ```bash
-# Run the transformer on test repositories
-make test
+# Run the full test suite
+pytest
 
-# Test a specific language
-python scripts/run_transformer.py --target /path/to/python-repo --dry-run
-python scripts/run_transformer.py --target /path/to/java-repo --dry-run
-python scripts/run_transformer.py --target /path/to/ts-repo --dry-run
+# With coverage report
+pytest --cov=src/agent_ready
 
-# Test with verbose output
-python scripts/run_transformer.py --target /path/to/repo --verbose
+# Test transformer on live repos (dry-run)
+agent-ready --target /path/to/python-repo --dry-run
+agent-ready --target /path/to/java-repo --dry-run
+agent-ready --target /path/to/ts-repo --dry-run
 ```
 
 ## Pull Request Checklist
@@ -267,28 +276,27 @@ Before submitting a PR, ensure:
 - [ ] Templates use `{{PLACEHOLDER}}` syntax consistently
 - [ ] New language templates follow the dual-format TOOL_SCHEMA pattern
   - `success` (boolean), `data` (result), `error` (string | null)
-- [ ] `run_transformer.py` detects the new language correctly
+- [ ] `analyser.py` detects the new language correctly
   - Run transformer on test repo with new language
   - Verify correct detection in output
 - [ ] README.md updated if new usage mode added
 - [ ] No hardcoded paths or usernames in code
 - [ ] Templates don't reference files/paths that don't exist
-- [ ] Tested without API key (static analysis works)
-- [ ] (Optional) Tested with API key for LLM-enhanced content
-- [ ] Code follows PEP 8 style
-- [ ] No debug print statements left behind
+- [ ] All 22 tests passing (`pytest`)
+- [ ] Code linted with `ruff` (`ruff check src/ tests/ && ruff format --check src/ tests/`)
 
 ## Code Style
 
 ```bash
-# Format code
-black scripts/run_transformer.py
+# Lint and format check
+ruff check src/ tests/
+ruff format --check src/ tests/
+
+# Auto-fix formatting
+ruff format src/ tests/
 
 # Check syntax
-python -m py_compile scripts/run_transformer.py
-
-# Check for issues
-python -m pylint scripts/run_transformer.py --disable=missing-docstring
+python -m py_compile src/agent_ready/cli.py
 ```
 
 ## How Can I Contribute?
@@ -323,7 +331,7 @@ Add new examples in `docs/EXAMPLES.md`:
 
 ```bash
 # Commands to run transformer
-python scripts/run_transformer.py --target /path/to/project
+agent-ready --target /path/to/project
 ```
 
 **Generated files:**

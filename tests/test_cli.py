@@ -11,97 +11,123 @@ import json
 import sys
 from pathlib import Path
 
-# Ensure the package is importable when running tests from the repo root
-# (no pip install needed)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import agent_ready  # noqa: E402
-from agent_ready.cli import (  # noqa: E402
-    RepoAnalyzer,
-    score,
-    TOOLKIT_ROOT,
-    TEMPLATES_DIR,
-)
+from agent_ready.cli import score, PROVIDERS, _resolve_models  # noqa: E402
 
 
 # ── Package metadata ───────────────────────────────────────────────────────
 
 def test_version_format():
-    """version string must be semver (x.y.z)."""
     parts = agent_ready.__version__.split(".")
     assert len(parts) == 3
     assert all(p.isdigit() for p in parts)
 
 
-# ── Path resolution ────────────────────────────────────────────────────────
+# ── Provider configuration ─────────────────────────────────────────────────
 
-def test_toolkit_root_exists():
-    """TOOLKIT_ROOT must resolve to the repo root (contains pyproject.toml)."""
-    assert (TOOLKIT_ROOT / "pyproject.toml").exists(), (
-        f"TOOLKIT_ROOT ({TOOLKIT_ROOT}) does not contain pyproject.toml"
-    )
+REQUIRED_KEYS = {"analysis", "generation", "evaluation", "api_key_env"}
 
 
-def test_templates_dir_exists():
-    """TEMPLATES_DIR must exist and contain core template files."""
-    assert TEMPLATES_DIR.is_dir()
-    required = [
-        "agent-context.template.json",
-        "AGENTS.template.md",
-        "CLAUDE.template.md",
-        "mcp.template.json",
-        "system_prompt.template.md",
-    ]
-    for name in required:
-        assert (TEMPLATES_DIR / name).exists(), f"Missing template: {name}"
+def test_providers_have_required_keys():
+    for name, config in PROVIDERS.items():
+        assert REQUIRED_KEYS <= config.keys(), f"Provider '{name}' missing: {REQUIRED_KEYS - config.keys()}"
 
 
-# ── RepoAnalyzer — language detection ─────────────────────────────────────
-
-def test_detect_languages_python(tmp_path):
-    (tmp_path / "main.py").write_text("print('hello')")
-    (tmp_path / "requirements.txt").touch()
-    analyzer = RepoAnalyzer(tmp_path)
-    metadata = analyzer.analyze()
-    assert "Python" in metadata.get("primary_languages", []) or \
-           "Python" in metadata.get("languages", {})
+def test_all_providers_present():
+    """Verify the full provider roster is present."""
+    expected = {"anthropic", "openai", "google", "groq", "mistral", "together", "ollama"}
+    assert expected <= set(PROVIDERS), f"Missing providers: {expected - set(PROVIDERS)}"
 
 
-def test_detect_languages_java(tmp_path):
-    java_dir = tmp_path / "src" / "main" / "java"
-    java_dir.mkdir(parents=True)
-    (java_dir / "App.java").write_text("public class App {}")
-    (tmp_path / "pom.xml").write_text("<project/>")
-    analyzer = RepoAnalyzer(tmp_path)
-    metadata = analyzer.analyze()
-    langs = metadata.get("primary_languages", []) or list(metadata.get("languages", {}).keys())
-    assert "Java" in langs
+def test_anthropic_models():
+    assert "opus"   in PROVIDERS["anthropic"]["analysis"].lower()
+    assert "sonnet" in PROVIDERS["anthropic"]["generation"].lower()
+    assert "haiku"  in PROVIDERS["anthropic"]["evaluation"].lower()
 
 
-def test_analyzer_empty_dir(tmp_path):
-    """Analyzer must not crash on an empty directory."""
-    metadata = RepoAnalyzer(tmp_path).analyze()
-    assert isinstance(metadata, dict)
+def test_openai_models():
+    assert "gpt"  in PROVIDERS["openai"]["analysis"].lower()
+    assert "mini" in PROVIDERS["openai"]["generation"].lower()
+    assert "nano" in PROVIDERS["openai"]["evaluation"].lower()
 
 
-# ── RepoAnalyzer — framework detection ────────────────────────────────────
-
-def test_detect_frameworks_fastapi(tmp_path):
-    (tmp_path / "requirements.txt").write_text("fastapi==0.110.0\nuvicorn")
-    metadata = RepoAnalyzer(tmp_path).analyze()
-    assert "FastAPI" in metadata.get("frameworks", [])
+def test_google_models():
+    assert "gemini" in PROVIDERS["google"]["analysis"].lower()
+    assert "lite"   in PROVIDERS["google"]["evaluation"].lower()
 
 
-def test_detect_frameworks_spring(tmp_path):
-    pom = """<project>
-  <parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-  </parent>
-</project>"""
-    (tmp_path / "pom.xml").write_text(pom)
-    metadata = RepoAnalyzer(tmp_path).analyze()
-    assert "Spring Boot" in metadata.get("frameworks", [])
+def test_groq_models():
+    assert "llama" in PROVIDERS["groq"]["analysis"].lower()
+    assert "llama" in PROVIDERS["groq"]["evaluation"].lower()
+
+
+def test_mistral_models():
+    assert "mistral" in PROVIDERS["mistral"]["analysis"].lower()
+    assert "mistral" in PROVIDERS["mistral"]["evaluation"].lower()
+
+
+def test_together_models():
+    assert "qwen" in PROVIDERS["together"]["analysis"].lower()
+    assert "llama" in PROVIDERS["together"]["generation"].lower()
+    assert "qwen" in PROVIDERS["together"]["evaluation"].lower()
+
+
+def test_ollama_no_api_key():
+    """Ollama is a local provider -- api_key_env must be empty."""
+    assert PROVIDERS["ollama"]["api_key_env"] == ""
+
+
+def test_cloud_providers_have_api_key_env():
+    """Every cloud provider must declare a non-empty api_key_env."""
+    cloud = {"anthropic", "openai", "google", "groq", "mistral", "together"}
+    for name in cloud:
+        assert PROVIDERS[name]["api_key_env"], f"Provider '{name}' has empty api_key_env"
+
+
+# ── _resolve_models ────────────────────────────────────────────────────────
+
+def test_resolve_models_preset():
+    """No --model: returns the named provider preset unchanged."""
+    result = _resolve_models("anthropic", None)
+    assert result is PROVIDERS["anthropic"]
+
+
+def test_resolve_models_custom_ollama():
+    """--model ollama/... should produce empty api_key_env (local provider)."""
+    result = _resolve_models("anthropic", "ollama/llama3.2")
+    assert result["analysis"]    == "ollama/llama3.2"
+    assert result["generation"]  == "ollama/llama3.2"
+    assert result["evaluation"]  == "ollama/llama3.2"
+    assert result["api_key_env"] == ""
+
+
+def test_resolve_models_custom_groq():
+    """--model groq/... should resolve to GROQ_API_KEY."""
+    result = _resolve_models("anthropic", "groq/mixtral-8x7b-32768")
+    assert result["analysis"]    == "groq/mixtral-8x7b-32768"
+    assert result["api_key_env"] == "GROQ_API_KEY"
+
+
+def test_resolve_models_custom_openai_prefix():
+    """--model gpt-... (no slash) prefix maps to OPENAI_API_KEY."""
+    result = _resolve_models("anthropic", "gpt-4-turbo")
+    assert result["api_key_env"] == "OPENAI_API_KEY"
+
+
+def test_resolve_models_custom_unknown_prefix():
+    """Unknown prefixes fall back to PREFIX_API_KEY."""
+    result = _resolve_models("anthropic", "bedrock/anthropic.claude-3-5-sonnet")
+    assert result["analysis"]    == "bedrock/anthropic.claude-3-5-sonnet"
+    assert result["api_key_env"] == "BEDROCK_API_KEY"
+
+
+def test_resolve_models_all_phases_same():
+    """--model always maps all three phases to the same model string."""
+    m = "mistral/mistral-large-latest"
+    result = _resolve_models("openai", m)
+    assert result["analysis"] == result["generation"] == result["evaluation"] == m
 
 
 # ── Scoring ────────────────────────────────────────────────────────────────
@@ -115,29 +141,57 @@ def test_score_returns_dict(tmp_path):
     assert result["score"] <= result["max"]
 
 
-def test_score_improves_with_context(tmp_path):
-    """A repo with agent-context.json scores higher than one without."""
+def test_score_zero_on_empty_dir(tmp_path):
+    assert score(tmp_path)["score"] == 0
+
+
+def test_score_max_is_100(tmp_path):
+    assert score(tmp_path)["max"] == 100
+
+
+def test_score_improves_with_agent_context(tmp_path):
     base = score(tmp_path)
     context = {
-        "project_name": "test-project",
-        "primary_languages": ["Python"],
-        "frameworks": ["FastAPI"],
-        "entry_point": "main.py",
-        "test_command": "pytest",
-        "build_system": "pip",
-        "environment_variables": [{"name": "PORT", "required": True}],
-        "last_scanned": "2026-01-01T00:00:00Z",
+        "static": {
+            "project_name": "test-project",
+            "primary_language": "Python",
+            "entry_point": "main.py",
+            "test_command": "pytest",
+            "restricted_write_paths": [".env"],
+            "environment_variables": ["DATABASE_URL"],
+            "domain_concepts": ["Order: a customer order", "Item: a menu item", "Driver: a driver"],
+        },
+        "dynamic": {"last_scanned": "2026-01-01T00:00:00Z"},
     }
     (tmp_path / "agent-context.json").write_text(json.dumps(context))
-    with_context = score(tmp_path)
-    assert with_context["score"] > base["score"]
+    (tmp_path / "main.py").write_text("# entry point")
+    assert score(tmp_path)["score"] > base["score"]
 
 
-# ── Shim backward compatibility ────────────────────────────────────────────
+def test_score_with_all_files(tmp_path):
+    context = {
+        "static": {
+            "project_name": "full-project",
+            "primary_language": "Python",
+            "entry_point": "main.py",
+            "test_command": "pytest",
+            "restricted_write_paths": [".env"],
+            "environment_variables": ["DATABASE_URL"],
+            "domain_concepts": ["A: a", "B: b", "C: c"],
+        },
+        "dynamic": {"last_scanned": "2026-01-01T00:00:00Z"},
+    }
+    (tmp_path / "agent-context.json").write_text(json.dumps(context))
+    (tmp_path / "main.py").write_text("# entry")
+    (tmp_path / "CLAUDE.md").write_text("# Claude")
+    (tmp_path / "AGENTS.md").write_text("# Agents")
+    (tmp_path / "system_prompt.md").write_text("# System")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "example.py").write_text("# tool")
+    (tmp_path / "openapi.yaml").write_text("openapi: 3.0.0")
+    gh = tmp_path / ".github" / "workflows"
+    gh.mkdir(parents=True)
+    (gh / "ci.yml").write_text("name: CI")
 
-def test_shim_is_runnable():
-    """scripts/run_transformer.py must be a thin shim delegating to the package."""
-    shim = TOOLKIT_ROOT / "scripts" / "run_transformer.py"
-    assert shim.exists()
-    src = shim.read_text()
-    assert "from agent_ready.cli import main" in src
+    assert score(tmp_path)["score"] >= 90

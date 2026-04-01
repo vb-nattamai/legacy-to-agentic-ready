@@ -27,31 +27,29 @@ The polyglot monorepo scores lower because Opus was reading previously generated
 
 ## How it works
 
-Two modes — choose based on your needs:
-
-**Static mode** (default, no API key needed)
-Scans your repo, fills templates with detected metadata. Good for a quick scaffold. First-run score: ~40–50/100.
-
-**LLM-first mode** (`--llm`, requires `ANTHROPIC_API_KEY`)
-Claude reads your actual code and writes every file from scratch. No placeholders. First-run score: ~85/100.
+AgentReady is **LLM-first** — it reads your actual code and writes every file from scratch. No templates, no placeholders.
 
 ```
 Phase 1 — Collect   : reads file tree, source files, config, CI, README
-Phase 2 — Analyse   : Claude Opus reads your code and infers domain concepts,
+Phase 2 — Analyse   : LLM reads your code and infers domain concepts,
                       entry points, env vars, restricted paths, pitfalls
-Phase 3 — Generate  : Claude Sonnet writes AGENTS.md, CLAUDE.md,
+Phase 3 — Generate  : LLM writes AGENTS.md, CLAUDE.md,
                       system_prompt.md, agent-context.json, memory/schema.md
 Phase 4 — Score     : 100-point readiness score
 Phase 5 — Evaluate  : measures whether context files actually improve AI responses
 ```
 
-**Model strategy:**
+**Provider strategy — analysis uses the most capable model, eval uses the cheapest:**
 
-| Phase | Model | Why |
-|-------|-------|-----|
-| Analysis | Claude Opus | Deepest reasoning over complex code |
-| Generation | Claude Sonnet | Best structured writing quality |
-| Evaluation | Claude Haiku | 36 API calls — speed and cost matter |
+| Provider | Analysis | Generation | Evaluation | Key |
+|---|---|---|---|---|
+| `anthropic` | claude-opus-4-6 | claude-sonnet-4-6 | claude-haiku-4-5 | `ANTHROPIC_API_KEY` |
+| `openai` | gpt-5.4 | gpt-5.4-mini | gpt-5.4-nano | `OPENAI_API_KEY` |
+| `google` | gemini-2.5-pro | gemini-2.5-pro | gemini-2.5-flash-lite | `GOOGLE_API_KEY` |
+| `groq` | llama-3.3-70b | llama-3.3-70b | llama-3.1-8b-instant | `GROQ_API_KEY` |
+| `mistral` | mistral-large | mistral-large | mistral-small | `MISTRAL_API_KEY` |
+| `together` | Qwen3.5-397B | Llama-3.3-70B | Qwen3.5-9B | `TOGETHER_API_KEY` |
+| `ollama` | llama3.3 | llama3.3 | llama3.2 | _(local — no key)_ |
 
 ---
 
@@ -66,15 +64,22 @@ pip install "git+https://github.com/vb-nattamai/agent-ready.git[ai]"
 ### Run locally
 
 ```bash
-# Static mode — no API key needed
+# Default provider: Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
 agent-ready --target /path/to/your/repo
 
-# LLM-first mode — real content from real code
-export ANTHROPIC_API_KEY="sk-ant-..."
-agent-ready --target /path/to/your/repo --llm
+# Choose a different provider
+export OPENAI_API_KEY="sk-..."
+agent-ready --target /path/to/your/repo --provider openai
+
+export GROQ_API_KEY="gsk_..."
+agent-ready --target /path/to/your/repo --provider groq
+
+# Or pass any LiteLLM model string directly
+agent-ready --target /path/to/your/repo --model ollama/llama3.3   # local, free
 
 # Transform + measure improvement in one shot
-agent-ready --target /path/to/your/repo --llm --eval
+agent-ready --target /path/to/your/repo --eval
 
 # Preview without writing any files
 agent-ready --target /path/to/your/repo --dry-run
@@ -91,7 +96,7 @@ The recommended way for teams. Open an issue in your repo, get a PR automaticall
 Run **"Install AgentReady to Target Repository"** from the [Actions tab](https://github.com/vb-nattamai/agent-ready/actions/workflows/install-to-target-repo.yml):
 
 - **target_repo**: `myorg/my-legacy-api`
-- **llm**: ✅ enable LLM-first mode
+- **provider**: `anthropic` (or `openai`, `google`, `groq`, `mistral`, `together`, `ollama`)
 - **eval**: ✅ enable eval after transformation (optional)
 
 This pushes three files into your repo:
@@ -104,8 +109,8 @@ This pushes three files into your repo:
 In your target repo → Settings → Secrets and variables → Actions:
 
 ```
-ANTHROPIC_API_KEY = sk-ant-...   # required for LLM mode
-INSTALL_TOKEN     = ghp_...      # PAT with repo + workflow scopes
+ANTHROPIC_API_KEY = sk-ant-...   # set the key for your chosen provider
+INSTALL_TOKEN     = ghp_...       # PAT with repo + workflow scopes
 ```
 
 ### Step 3 — Open an issue
@@ -117,9 +122,9 @@ Issue opened
     │
     ├─ 1. Checks you are a repo collaborator
     ├─ 2. Calls agent-ready's reusable transformer
-    ├─ 3. Claude Opus analyses your codebase (~60s)
-    ├─ 4. Claude Sonnet writes all scaffolding files
-    ├─ 5. (Optional) Claude Haiku evaluates context quality
+    ├─ 3. Analysis model reads your codebase (~60s)
+    ├─ 4. Generation model writes all scaffolding files
+    ├─ 5. (Optional) Evaluation model measures context quality
     ├─ 6. Opens a PR: "🤖 Add agentic-ready scaffolding"
     ├─ 7. Comments on your issue with the PR link
     └─ 8. Closes the issue ✅
@@ -146,8 +151,8 @@ Issue opened
 AgentReady measures whether the generated files actually improve AI responses — not just whether the files exist.
 
 ```bash
-# Run eval after transformation
-agent-ready --target /path/to/repo --llm --eval
+# Eval after transformation
+agent-ready --target /path/to/repo --eval
 
 # Run eval only against existing context files
 agent-ready --target /path/to/repo --eval-only
@@ -174,25 +179,33 @@ Results are saved to `AGENTIC_EVAL.md` with a full per-question breakdown.
 ## CLI Reference
 
 ```bash
-# LLM-first transformation (recommended)
-agent-ready --target /path/to/repo --llm
-
-# Static transformation (no API key needed)
+# Default provider: Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
 agent-ready --target /path/to/repo
 
+# Choose a different provider
+export OPENAI_API_KEY="sk-..."
+agent-ready --target /path/to/repo --provider openai
+
+export GROQ_API_KEY="gsk_..."
+agent-ready --target /path/to/repo --provider groq
+
+# Or pass any LiteLLM model string directly
+agent-ready --target /path/to/repo --model ollama/llama3.3   # local, free
+
 # Selective generation
-agent-ready --target /path/to/repo --llm --only agents
-agent-ready --target /path/to/repo --llm --only context
-agent-ready --target /path/to/repo --llm --only memory
+agent-ready --target /path/to/repo --only agents
+agent-ready --target /path/to/repo --only context
+agent-ready --target /path/to/repo --only memory
 
 # Preview without writing
-agent-ready --target /path/to/repo --llm --dry-run
+agent-ready --target /path/to/repo --dry-run
 
 # Force overwrite existing files
-agent-ready --target /path/to/repo --llm --force
+agent-ready --target /path/to/repo --force
 
 # Transform + evaluate
-agent-ready --target /path/to/repo --llm --eval
+agent-ready --target /path/to/repo --eval
 
 # Evaluate only (context files already exist)
 agent-ready --target /path/to/repo --eval-only
@@ -201,21 +214,25 @@ agent-ready --target /path/to/repo --eval-only
 agent-ready --target /path/to/repo --eval-only --fail-level 0.8
 
 # Suppress output (CI-friendly)
-agent-ready --target /path/to/repo --llm --quiet
+agent-ready --target /path/to/repo --quiet
 
 # Install pre-commit hook for automatic context refresh
 agent-ready --target /path/to/repo --install-hooks
 
-# Verify generated context with Claude
+# Verify generated context with the evaluation model
 agent-ready --target /path/to/repo --verify
 ```
 
-**Environment variables:**
+**Environment variables (set the one for your chosen provider):**
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."   # Required for --llm and --eval modes
-export OPENAI_API_KEY="sk-..."          # Optional
-export GOOGLE_API_KEY="..."             # Optional
+export ANTHROPIC_API_KEY="sk-ant-..."  # anthropic (default)
+export OPENAI_API_KEY="sk-..."          # openai
+export GOOGLE_API_KEY="..."             # google
+export GROQ_API_KEY="gsk_..."           # groq
+export MISTRAL_API_KEY="..."            # mistral
+export TOGETHER_API_KEY="..."           # together
+# ollama: no key needed — runs locally
 ```
 
 ---
@@ -239,7 +256,7 @@ Every run outputs a 100-point score — an actionable to-do list, not a grade.
 | OpenAPI spec exists | 5 |
 | CI config exists | 5 |
 
-Static mode first run: **~40–50/100**
+Static mode first run: **N/A — LLM mode is always used**
 LLM-first mode first run: **~85/100**
 
 ---
@@ -256,7 +273,7 @@ The engine. Checks out the target repo, runs the LLM pipeline, optionally runs e
 |---|---|---|
 | `target_repo` | required | Target repo in `owner/repo` format |
 | `target_branch` | `main` | Branch the PR is opened against |
-| `llm` | `false` | Enable LLM-first mode |
+| `provider` | `anthropic` | LLM provider: `anthropic`, `openai`, `google`, `groq`, `mistral`, `together`, `ollama` |
 | `eval` | `false` | Run eval after transformation |
 | `fail_level` | `0.0` | Exit 1 if eval pass rate below threshold |
 | `only` | _(all)_ | Limit: `agents`, `tools`, `context`, `memory` |
@@ -341,7 +358,7 @@ agent-ready --target /path/to/repo --only context --force
 
 ## Philosophy
 
-1. **LLM-first** — Claude reads your actual code and writes real content, not template placeholders
+1. **LLM-first** — your chosen LLM reads your actual code and writes real content, not template placeholders
 2. **Measurable** — the eval framework proves whether the context files actually improve AI responses
 3. **Never modify existing code** — only additive changes, always
 4. **Never hallucinate** — all generated content is grounded in what the LLM actually read
