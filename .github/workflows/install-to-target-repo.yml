@@ -12,11 +12,11 @@ on:
         required: false
         default: 'main'
         type: string
-      llm:
-        description: 'Enable LLM-first mode in the installed trigger workflow'
+      provider:
+        description: 'LLM provider: anthropic | openai | google | groq | mistral | together | ollama'
         required: false
-        default: false
-        type: boolean
+        default: 'anthropic'
+        type: string
       eval:
         description: 'Enable eval mode in the installed trigger workflow'
         required: false
@@ -41,7 +41,7 @@ jobs:
             echo "   This will fail for repos outside this org."
           fi
           echo "✅ Installing to: ${{ inputs.target_repo }}@${{ inputs.target_branch }}"
-          echo "   LLM mode:  ${{ inputs.llm }}"
+          echo "   Provider:  ${{ inputs.provider }}"
           echo "   Eval mode: ${{ inputs.eval }}"
 
       - name: Checkout toolkit (for workflow templates)
@@ -54,7 +54,7 @@ jobs:
           GH_TOKEN: ${{ secrets.INSTALL_TOKEN || github.token }}
           TARGET_REPO: ${{ inputs.target_repo }}
           TARGET_BRANCH: ${{ inputs.target_branch }}
-          LLM_MODE: ${{ inputs.llm }}
+          PROVIDER: ${{ inputs.provider }}
           EVAL_MODE: ${{ inputs.eval }}
         run: |
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" target-repo
@@ -62,31 +62,25 @@ jobs:
 
           mkdir -p .github/workflows .github/ISSUE_TEMPLATE
 
-          # Patch llm and/or eval flags in the trigger template before copying
           TEMPLATE="../toolkit/src/agent_ready/templates/install-workflow.yml"
 
-          if [ "$LLM_MODE" = "true" ] && [ "$EVAL_MODE" = "true" ]; then
-            sed -e 's/llm: false/llm: true/' \
+          # Patch provider and eval flags before copying
+          if [ "$EVAL_MODE" = "true" ]; then
+            sed -e "s/provider: anthropic/provider: ${PROVIDER}/" \
                 -e 's/eval: false/eval: true/' \
                 "$TEMPLATE" > .github/workflows/agentic-ready.yml
-            echo "✅ LLM mode and eval mode enabled in trigger workflow"
-          elif [ "$LLM_MODE" = "true" ]; then
-            sed 's/llm: false/llm: true/' \
-                "$TEMPLATE" > .github/workflows/agentic-ready.yml
-            echo "✅ LLM mode enabled in trigger workflow"
-          elif [ "$EVAL_MODE" = "true" ]; then
-            sed 's/eval: false/eval: true/' \
-                "$TEMPLATE" > .github/workflows/agentic-ready.yml
-            echo "✅ Eval mode enabled in trigger workflow"
+            echo "✅ Provider '${PROVIDER}' and eval mode enabled in trigger workflow"
           else
-            cp "$TEMPLATE" .github/workflows/agentic-ready.yml
+            sed "s/provider: anthropic/provider: ${PROVIDER}/" \
+                "$TEMPLATE" > .github/workflows/agentic-ready.yml
+            echo "✅ Provider '${PROVIDER}' set in trigger workflow"
           fi
 
-          # Weekly context drift detector — opens a PR if agent-context.json drifts
+          # Weekly context drift detector
           cp ../toolkit/src/agent_ready/templates/context-drift-detector-workflow.yml \
              .github/workflows/context-drift-detector.yml
 
-          # Issue form template — pre-fills title + checklist so trigger always fires correctly
+          # Issue form template
           cp ../toolkit/src/agent_ready/templates/issue-template-agentic-ready.yml \
              .github/ISSUE_TEMPLATE/agentic-ready.yml
 
@@ -154,6 +148,6 @@ jobs:
           echo "   A transformation issue has been created automatically."
           echo "   Monitor progress: https://github.com/${TARGET_REPO}/actions"
           echo ""
-          echo "   Prerequisites for LLM mode:"
-          echo "   • ANTHROPIC_API_KEY — add to ${TARGET_REPO} secrets"
-          echo "   • INSTALL_TOKEN     — add to ${TARGET_REPO} secrets (for push access)"
+          echo "   Required secrets in ${TARGET_REPO}:"
+          echo "   • API key for provider '${{ inputs.provider }}'"
+          echo "   • INSTALL_TOKEN — PAT with repo + workflow scopes"

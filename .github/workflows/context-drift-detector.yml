@@ -32,15 +32,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.agent-ready[ai]' -q
+          pip install -e './.agent-ready[ai]' -q
 
-      - name: Run context-only refresh
+      - name: Run context-only refresh (LLM mode)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PYTHONPATH: ${{ github.workspace }}/.agent-ready/src
         run: |
           python .agent-ready/src/agent_ready/cli.py \
-            --target . --only context --force --quiet
+            --target . --only context --force --quiet --llm
 
       - name: Detect meaningful drift
         id: drift
