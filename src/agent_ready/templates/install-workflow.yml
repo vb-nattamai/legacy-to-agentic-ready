@@ -4,9 +4,7 @@ on:
     types: [labeled]
 jobs:
   check-permission:
-    if: |
-      contains(github.event.issue.title, '[agentic-ready]') ||
-      contains(github.event.issue.labels.*.name, 'agentic-ready')
+    if: contains(github.event.issue.labels.*.name, 'agentic-ready')
     runs-on: ubuntu-latest
     permissions:
       issues: read
@@ -30,7 +28,6 @@ jobs:
             } else {
               core.setOutput('allowed', 'true');
             }
-
   transform:
     needs: check-permission
     if: needs.check-permission.outputs.allowed == 'true'
@@ -43,7 +40,7 @@ jobs:
       target_repo: ${{ github.repository }}
       target_branch: ${{ github.event.repository.default_branch }}
       issue_number: ${{ github.event.issue.number }}
-      llm: false
+      provider: anthropic
       eval: false
       fail_level: '0.0'
       force: false
