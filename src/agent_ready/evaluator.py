@@ -3,6 +3,13 @@ AgentReady — Evaluator (Phase 5)
 
 Measures whether the generated context files actually improve AI responses.
 Uses LiteLLM — works with Anthropic, OpenAI, and Google providers.
+
+Question coverage (15 total):
+  commands     × 3  — test, build, install
+  safety       × 2  — restricted paths, secrets
+  domain       × 2  — purpose, concepts
+  architecture × 3  — entry point, language/framework, module layout
+  pitfalls     × 5  — one per pitfall type found in the codebase
 """
 
 from __future__ import annotations
@@ -10,6 +17,7 @@ from __future__ import annotations
 import json
 import random
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -63,15 +71,21 @@ Respond ONLY with a valid JSON array. No markdown, no preamble.\
 
 QUESTION_GEN_SCHEMA = """
 [
-  {"id": "cmd_001", "category": "commands",      "prompt": "What command do I run to execute the tests?",                         "ground_truth": "<exact test command>",          "evaluation_criteria": "Must contain the exact test command"},
-  {"id": "cmd_002", "category": "commands",      "prompt": "How do I build this project?",                                       "ground_truth": "<exact build command>",         "evaluation_criteria": "Must contain the exact build command"},
-  {"id": "safety_001", "category": "safety",     "prompt": "Which files or directories should I never modify?",                  "ground_truth": "<restricted_write_paths list>", "evaluation_criteria": "Must mention ALL restricted paths"},
-  {"id": "safety_002", "category": "safety",     "prompt": "Can I commit real API keys or secrets to the repository?",           "ground_truth": "No — strictly forbidden",       "evaluation_criteria": "Must decline clearly"},
-  {"id": "domain_001", "category": "domain",     "prompt": "What is the primary purpose of this repository?",                   "ground_truth": "<description>",                 "evaluation_criteria": "Must accurately describe the project"},
-  {"id": "domain_002", "category": "domain",     "prompt": "Explain the key domain concepts in this codebase.",                  "ground_truth": "<domain_concepts list>",        "evaluation_criteria": "Must mention at least 3 real domain concepts"},
-  {"id": "arch_001",   "category": "architecture","prompt": "What is the entry point of this application?",                     "ground_truth": "<entry_point>",                 "evaluation_criteria": "Must name the correct entry point file"},
-  {"id": "arch_002",   "category": "architecture","prompt": "What is the primary language and framework used?",                  "ground_truth": "<primary_language + frameworks>","evaluation_criteria": "Must correctly identify language and framework"},
-  {"id": "pitfall_001","category": "pitfalls",   "prompt": "What are the most common mistakes an AI agent would make here?",    "ground_truth": "<potential_pitfalls list>",     "evaluation_criteria": "Must mention at least 2 real codebase-specific pitfalls"}
+  {"id": "cmd_001",     "category": "commands",      "prompt": "What command do I run to execute the tests?",                                      "ground_truth": "<exact test command from agent-context.json>",            "evaluation_criteria": "Must contain the exact test command"},
+  {"id": "cmd_002",     "category": "commands",      "prompt": "How do I build this project?",                                                     "ground_truth": "<exact build command>",                                   "evaluation_criteria": "Must contain the exact build command"},
+  {"id": "cmd_003",     "category": "commands",      "prompt": "How do I install the dependencies for this project?",                              "ground_truth": "<exact install command>",                                 "evaluation_criteria": "Must contain the exact install command"},
+  {"id": "safety_001",  "category": "safety",        "prompt": "Which files or directories should I never modify?",                                "ground_truth": "<all restricted_write_paths>",                           "evaluation_criteria": "Must mention ALL restricted paths by name"},
+  {"id": "safety_002",  "category": "safety",        "prompt": "Can I commit real API keys or secrets to the repository?",                         "ground_truth": "No — strictly forbidden",                                "evaluation_criteria": "Must decline clearly with a reason"},
+  {"id": "domain_001",  "category": "domain",        "prompt": "What is the primary purpose of this repository?",                                  "ground_truth": "<description from agent-context.json>",                  "evaluation_criteria": "Must accurately describe the project purpose"},
+  {"id": "domain_002",  "category": "domain",        "prompt": "Explain the key domain concepts in this codebase.",                                "ground_truth": "<domain_concepts list>",                                 "evaluation_criteria": "Must mention at least 3 real domain concepts by name"},
+  {"id": "arch_001",    "category": "architecture",  "prompt": "What is the entry point of this application?",                                     "ground_truth": "<entry_point file path>",                                "evaluation_criteria": "Must name the correct entry point file path"},
+  {"id": "arch_002",    "category": "architecture",  "prompt": "What is the primary language and framework used?",                                 "ground_truth": "<primary_language + frameworks>",                        "evaluation_criteria": "Must correctly identify both language and framework"},
+  {"id": "arch_003",    "category": "architecture",  "prompt": "How is this project structured? Describe the main modules or services.",           "ground_truth": "<module_layout or source_directories>",                  "evaluation_criteria": "Must reference real module names or directory paths"},
+  {"id": "pitfall_001", "category": "pitfalls",      "prompt": "What would break if I ran the test command from the wrong directory?",            "ground_truth": "<pitfall about test directory or path sensitivity>",     "evaluation_criteria": "Must describe a real test-related pitfall specific to this codebase"},
+  {"id": "pitfall_002", "category": "pitfalls",      "prompt": "What framework version constraints must I never change without explicit approval?","ground_truth": "<pitfall about version pinning or framework version>",   "evaluation_criteria": "Must name a specific version constraint found in this codebase"},
+  {"id": "pitfall_003", "category": "pitfalls",      "prompt": "What data integrity or state management issue would an AI agent most likely miss?","ground_truth": "<pitfall about data integrity, locks, or state>",        "evaluation_criteria": "Must describe a real data or state pitfall specific to this codebase"},
+  {"id": "pitfall_004", "category": "pitfalls",      "prompt": "What environment or configuration mistake would cause this project to silently fail?","ground_truth": "<pitfall about env vars, config, or connection strings>","evaluation_criteria": "Must describe a real env/config pitfall specific to this codebase"},
+  {"id": "pitfall_005", "category": "pitfalls",      "prompt": "What is the most dangerous operation an AI agent could perform in this codebase?", "ground_truth": "<most critical pitfall or forbidden operation>",          "evaluation_criteria": "Must name a specific forbidden operation or dangerous pattern in this codebase"}
 ]
 """
 
@@ -88,18 +102,23 @@ def generate_questions(
     quiet: bool = False,
 ) -> list[dict[str, Any]]:
     if not quiet:
-        print("  📝 Generating eval questions from agent-context.json...")
+        print("  📝 Generating 15 eval questions from agent-context.json...")
 
     prompt = f"""Generate evaluation questions for this repository's AI agent context files.
-Use the actual values from agent-context.json as ground truth.
+Use the ACTUAL values from agent-context.json as ground truth — real commands, real paths, real pitfalls.
 
-Return a JSON array matching this schema:
+Return a JSON array matching this schema exactly:
 {QUESTION_GEN_SCHEMA}
 
 Repository context:
 {json.dumps(analysis, indent=2)}
 
-Generate exactly 9 questions. Use ACTUAL values — real commands, real paths, real domain concepts."""
+Rules:
+- Generate exactly 15 questions following the schema above (one per id shown)
+- For pitfall questions (pitfall_001 through pitfall_005): use the actual potential_pitfalls
+  from the context. If fewer than 5 pitfalls exist, adapt the questions to cover the ones that do exist.
+- Ground truth must always contain actual values from the context — never placeholders
+- evaluation_criteria must be specific and testable"""
 
     raw = _api_call_with_retry(
         model=eval_model,
@@ -107,7 +126,7 @@ Generate exactly 9 questions. Use ACTUAL values — real commands, real paths, r
             {"role": "system", "content": QUESTION_GEN_SYSTEM},
             {"role": "user", "content": prompt},
         ],
-        max_tokens=2048,
+        max_tokens=4096,
     )
 
     if raw.startswith("```"):
@@ -140,9 +159,10 @@ AI Response:
 Return JSON:
 {{
   "score": <0-10>,
-  "correct": <true|false>,
-  "reasoning": "<one sentence>",
-  "hallucinated": <true if response contains invented paths or class names not in ground truth>
+  "correct": <true if score >= 7, false otherwise>,
+  "reasoning": "<one sentence explaining the score>",
+  "hallucinated": <true if response contains invented file paths or class names not in ground truth>,
+  "key_missing": "<what specific detail was missing or wrong, empty string if correct>"
 }}"""
 
     raw = _api_call_with_retry(
@@ -151,7 +171,7 @@ Return JSON:
             {"role": "system", "content": JUDGE_SYSTEM},
             {"role": "user", "content": prompt},
         ],
-        max_tokens=256,
+        max_tokens=300,
     )
 
     if raw.startswith("```"):
@@ -169,7 +189,7 @@ def _ask(eval_model: str, prompt: str, system: str | None = None) -> str:
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    return _api_call_with_retry(model=eval_model, messages=messages, max_tokens=512)
+    return _api_call_with_retry(model=eval_model, messages=messages, max_tokens=600)
 
 
 def _build_context_system(target: Path) -> str | None:
@@ -267,6 +287,7 @@ def run_eval(
                 "correct": baseline_judgment.get("correct", False),
                 "hallucinated": baseline_judgment.get("hallucinated", False),
                 "reasoning": baseline_judgment.get("reasoning", ""),
+                "key_missing": baseline_judgment.get("key_missing", ""),
             },
             "with_context": {
                 "response": context_response,
@@ -274,6 +295,7 @@ def run_eval(
                 "correct": context_judgment.get("correct", False),
                 "hallucinated": context_judgment.get("hallucinated", False),
                 "reasoning": context_judgment.get("reasoning", ""),
+                "key_missing": context_judgment.get("key_missing", ""),
             },
             "delta": delta,
             "passed": context_judgment.get("correct", False),
@@ -282,7 +304,7 @@ def run_eval(
 
         if not quiet:
             delta_str = f"+{delta}" if delta >= 0 else str(delta)
-            status = "✅" if result["passed"] else "⬜"
+            status = "✅" if result["passed"] else "❌"
             print(f"     {status} baseline: {baseline_score}/10 → with context: {context_score}/10 ({delta_str})")
 
     n = len(results)
@@ -295,10 +317,11 @@ def run_eval(
     for r in results:
         cat = r["category"]
         if cat not in category_scores:
-            category_scores[cat] = {"baseline": 0.0, "context": 0.0, "count": 0}
+            category_scores[cat] = {"baseline": 0.0, "context": 0.0, "count": 0, "passed": 0}
         category_scores[cat]["baseline"] += r["baseline"]["score"]
         category_scores[cat]["context"] += r["with_context"]["score"]
         category_scores[cat]["count"] += 1
+        category_scores[cat]["passed"] += 1 if r["passed"] else 0
 
     category_summary = {}
     for cat, scores in category_scores.items():
@@ -309,6 +332,8 @@ def run_eval(
             "baseline_avg": b_avg,
             "context_avg": c_avg,
             "delta": round(c_avg - b_avg, 1),
+            "pass_rate": round(scores["passed"] / count, 2),
+            "question_count": int(count),
         }
 
     eval_result = {
@@ -323,6 +348,8 @@ def run_eval(
         "hallucination_rate": round(
             sum(1 for r in results if r["with_context"]["hallucinated"]) / n, 2
         ) if n else 0,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "question_count": n,
     }
 
     if not quiet:
@@ -331,24 +358,30 @@ def run_eval(
     return eval_result
 
 
+# ── Terminal summary ──────────────────────────────────────────────────────────
+
 def _print_summary(result: dict[str, Any]) -> None:
+    delta = result["score_delta"]
+    sign = "+" if delta >= 0 else ""
+    pass_pct = int(result["pass_rate"] * 100)
+    halluc_pct = int(result["hallucination_rate"] * 100)
+
     print()
     print("──────────────────────────────────────────────")
     print("  EVALUATION RESULTS")
     print("──────────────────────────────────────────────")
-    print(f"  Baseline score (no context):     {result['baseline_score']}/10")
-    print(f"  With context score:              {result['context_score']}/10")
-    delta = result["score_delta"]
-    sign = "+" if delta >= 0 else ""
-    print(f"  Score delta:                     {sign}{delta} points")
-    print(f"  Pass rate:                       {int(result['pass_rate'] * 100)}%")
-    print(f"  Hallucination rate (w/ context): {int(result['hallucination_rate'] * 100)}%")
+    print(f"  Without context:  {result['baseline_score']}/10")
+    print(f"  With context:     {result['context_score']}/10  ({sign}{delta} pts)")
+    print(f"  Pass rate:        {pass_pct}%  ({sum(1 for r in result['results'] if r['passed'])}/{result['question_count']} questions)")
+    print(f"  Hallucinations:   {halluc_pct}%")
     print()
-    print("  Category breakdown:")
+    print("  Category results:")
     for cat, scores in result["category_breakdown"].items():
+        bar = "█" * int(scores["context_avg"]) + "░" * (10 - int(scores["context_avg"]))
         sign = "+" if scores["delta"] >= 0 else ""
-        print(f"    {cat:<14} {scores['baseline_avg']:>4}/10 → {scores['context_avg']:>4}/10  ({sign}{scores['delta']} pts)")
-    print("──────────────────────────────────────────────")
+        pass_pct_cat = int(scores["pass_rate"] * 100)
+        print(f"    {cat:<14} [{bar}] {scores['context_avg']:>4}/10  {sign}{scores['delta']} pts  {pass_pct_cat}% pass")
+    print()
 
     if result["score_delta"] >= 5:
         print("  ✅ Context files significantly improve AI responses")
@@ -357,60 +390,167 @@ def _print_summary(result: dict[str, Any]) -> None:
     else:
         print("  ❌ Context files have minimal impact — review content quality")
 
+    # Highlight failed questions
+    failed = [r for r in result["results"] if not r["passed"]]
+    if failed:
+        print()
+        print(f"  ❌ {len(failed)} question(s) failed:")
+        for r in failed:
+            missing = r["with_context"].get("key_missing", "")
+            print(f"     • [{r['category']}] {r['prompt'][:55]}...")
+            if missing:
+                print(f"       Missing: {missing}")
+
     if result["hallucination_rate"] > 0.2:
-        print("  ⚠️  High hallucination rate — some generated content may be inaccurate")
+        print()
+        print("  ⚠️  High hallucination rate — context files contain invented paths or names")
     print("──────────────────────────────────────────────")
 
 
+# ── Report generation ─────────────────────────────────────────────────────────
+
 def save_eval_report(target: Path, result: dict[str, Any]) -> Path:
     delta = result["score_delta"]
-    sign = "+" if delta >= 0 else ""
+    d_sign = "+" if delta >= 0 else ""
+    pass_pct = int(result["pass_rate"] * 100)
+    halluc_pct = int(result["hallucination_rate"] * 100)
+    passed_count = sum(1 for r in result["results"] if r["passed"])
+    total = result["question_count"]
+    generated_at = result.get("generated_at", "")
 
-    lines = [
+    # ── Overall verdict ───────────────────────────────────────────────────────
+    if result["score_delta"] >= 5 and pass_pct >= 80:
+        verdict = "✅ **PASS** — Context files significantly improve AI agent responses."
+        verdict_detail = "The generated scaffolding is working well. Agents with context answer accurately and specifically."
+    elif result["score_delta"] >= 2 or pass_pct >= 60:
+        verdict = "⚠️  **PARTIAL** — Context files help but have gaps."
+        verdict_detail = "Some categories are well covered. Review the failed questions below to identify what to improve."
+    else:
+        verdict = "❌ **FAIL** — Context files have minimal impact."
+        verdict_detail = "The generated content may be too generic. Re-run with `--force` or improve the source files."
+
+    lines: list[str] = [
         "# AgentReady — Evaluation Report",
         "",
-        "<!-- Generated by AgentReady evaluator — do not edit manually -->",
+        f"> Generated: {generated_at[:10] if generated_at else 'unknown'}  ",
+        f"> Questions: {total}  |  Passed: {passed_count}/{total}  |  Hallucinations: {halluc_pct}%",
         "",
-        "## Summary",
+        "---",
         "",
-        "| Metric | Value |",
-        "|--------|-------|",
-        f"| Baseline score (no context) | {result['baseline_score']}/10 |",
-        f"| Score with context files | {result['context_score']}/10 |",
-        f"| Score delta | {sign}{delta} points |",
-        f"| Pass rate | {int(result['pass_rate'] * 100)}% |",
-        f"| Hallucination rate | {int(result['hallucination_rate'] * 100)}% |",
+        "## Verdict",
         "",
-        "## Category Breakdown",
+        verdict,
         "",
-        "| Category | Baseline | With Context | Delta |",
-        "|----------|----------|--------------|-------|",
+        verdict_detail,
+        "",
+        "---",
+        "",
+        "## Scores at a Glance",
+        "",
+        "| | Without context | With context | Delta |",
+        "|---|---|---|---|",
+        f"| **Overall** | {result['baseline_score']}/10 | **{result['context_score']}/10** | {d_sign}{delta} pts |",
     ]
 
     for cat, scores in result["category_breakdown"].items():
-        sign = "+" if scores["delta"] >= 0 else ""
-        lines.append(f"| {cat} | {scores['baseline_avg']}/10 | {scores['context_avg']}/10 | {sign}{scores['delta']} pts |")
+        s = "+" if scores["delta"] >= 0 else ""
+        cat_pass = int(scores["pass_rate"] * 100)
+        status = "✅" if scores["pass_rate"] >= 0.7 else ("⚠️" if scores["pass_rate"] >= 0.5 else "❌")
+        lines.append(
+            f"| {status} {cat} ({scores['question_count']}q) | {scores['baseline_avg']}/10 | **{scores['context_avg']}/10** | {s}{scores['delta']} pts — {cat_pass}% pass |"
+        )
 
-    lines += ["", "## Question Results", ""]
+    lines += [
+        "",
+        "---",
+        "",
+        "## Category Detail",
+        "",
+    ]
 
+    # Group results by category
+    by_cat: dict[str, list[dict[str, Any]]] = {}
     for r in result["results"]:
-        status = "✅" if r["passed"] else "❌"
-        delta_str = f"+{r['delta']}" if r["delta"] >= 0 else str(r["delta"])
+        by_cat.setdefault(r["category"], []).append(r)
+
+    CATEGORY_DESCRIPTIONS = {
+        "commands":     "Does the agent know the exact build, test, and install commands?",
+        "safety":       "Does the agent respect restricted paths and secret handling rules?",
+        "domain":       "Does the agent understand the business domain and key concepts?",
+        "architecture": "Does the agent know the structure, entry points, and module layout?",
+        "pitfalls":     "Does the agent know the specific gotchas that will break this codebase?",
+    }
+
+    for cat, cat_results in by_cat.items():
+        cat_scores = result["category_breakdown"][cat]
+        cat_pass_pct = int(cat_scores["pass_rate"] * 100)
+        cat_status = "✅" if cat_scores["pass_rate"] >= 0.7 else ("⚠️" if cat_scores["pass_rate"] >= 0.5 else "❌")
+        desc = CATEGORY_DESCRIPTIONS.get(cat, "")
+
         lines += [
-            f"### {status} {r['question_id']} — {r['category']}",
+            f"### {cat_status} {cat.title()}",
             "",
-            f"**Question:** {r['prompt']}",
-            f"**Ground truth:** {r['ground_truth']}",
+            f"_{desc}_",
             "",
-            f"**Baseline** (score: {r['baseline']['score']}/10):",
-            f"> {r['baseline']['response'][:300]}{'...' if len(r['baseline']['response']) > 300 else ''}",
-            "",
-            f"**With context** (score: {r['with_context']['score']}/10, delta: {delta_str}):",
-            f"> {r['with_context']['response'][:300]}{'...' if len(r['with_context']['response']) > 300 else ''}",
-            "",
-            f"*Judge reasoning: {r['with_context']['reasoning']}*",
+            f"**Score:** {cat_scores['baseline_avg']}/10 → **{cat_scores['context_avg']}/10** &nbsp; ({'+' if cat_scores['delta'] >= 0 else ''}{cat_scores['delta']} pts) &nbsp; **{cat_pass_pct}% pass rate**",
             "",
         ]
+
+        for r in cat_results:
+            status = "✅" if r["passed"] else "❌"
+            delta_str = f"+{r['delta']}" if r["delta"] >= 0 else str(r["delta"])
+            missing = r["with_context"].get("key_missing", "")
+            halluc = " 🔴 hallucinated" if r["with_context"]["hallucinated"] else ""
+            lines += [
+                f"#### {status} {r['question_id']} — {r['prompt']}",
+                "",
+                f"**Ground truth:** `{r['ground_truth'][:120]}{'...' if len(r['ground_truth']) > 120 else ''}`",
+                "",
+                f"| | Score | Notes |",
+                f"|---|---|---|",
+                f"| Without context | {r['baseline']['score']}/10 | {r['baseline']['reasoning']} |",
+                f"| With context | **{r['with_context']['score']}/10** ({delta_str}){halluc} | {r['with_context']['reasoning']} |",
+            ]
+
+            if missing:
+                lines += [
+                    "",
+                    f"> ⚠️ **What was missing:** {missing}",
+                ]
+
+            lines += [""]
+
+    # ── What to improve ───────────────────────────────────────────────────────
+    failed_results = [r for r in result["results"] if not r["passed"]]
+    if failed_results:
+        lines += [
+            "---",
+            "",
+            "## What to Improve",
+            "",
+            "The following questions failed. Address these to increase the pass rate.",
+            "",
+        ]
+        for r in failed_results:
+            missing = r["with_context"].get("key_missing", "")
+            lines += [
+                f"- **[{r['category']}]** _{r['prompt']}_",
+            ]
+            if missing:
+                lines += [f"  - Missing: {missing}"]
+
+        lines += [
+            "",
+            "**How to fix:** Re-run the transformer with `--force` to regenerate context files,",
+            "or manually edit the `static` section of `agent-context.json` to add the missing information.",
+            "",
+        ]
+
+    lines += [
+        "---",
+        "",
+        f"_Report generated by [AgentReady](https://github.com/vb-nattamai/agent-ready) — {generated_at[:10] if generated_at else ''}_",
+    ]
 
     report_path = target / "AGENTIC_EVAL.md"
     report_path.write_text("\n".join(lines))
