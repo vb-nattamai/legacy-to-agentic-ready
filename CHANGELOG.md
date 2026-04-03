@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] — 2026-04-03
+
+
+### Fixed
+
+- correct install path and add --llm to context drift detector
+
+### Changed
+
+- docs: update README with food-delivery benchmark, 15-question eval, new report format
+- chore: remove static template files — replaced by LLM generation
+
+---
 ## [2.4.2] — 2026-04-02
 
 
