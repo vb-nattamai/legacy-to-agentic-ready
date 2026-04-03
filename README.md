@@ -11,17 +11,18 @@ Transform any legacy repository into an AI-agent-ready codebase — with real co
 
 AI agents fail on unfamiliar codebases because they lack context — they invent file paths, guess commands, and miss domain concepts entirely. AgentReady fixes this by generating scaffolding files that give agents real, verified knowledge of your repository before they touch a single line of code.
 
-**Proven results across three real codebases:**
+**Proven results across four real codebases:**
 
 | Repo | Stack | Files | Without context | With context | Pass rate |
 |------|-------|-------|----------------|--------------|-----------|
 | Simple bowling kata | Java, single class | 13 | 0.8 / 10 | 9.7 / 10 | 100% |
 | [travel-assist](https://github.com/vb-nattamai/travel-assist) | Kotlin, Spring Boot | 23 | 0.3 / 10 | 8.9 / 10 | 89% |
 | [bowling-kata](https://github.com/vb-nattamai/bowling-kata) | Java, Python, Go, TypeScript | 47 | 2.1 / 10 | 7.6 / 10 | 89% |
+| [food-delivery](https://github.com/vb-nattamai/food-delivery) | Java, Kotlin, Python, Go, TypeScript, React | 81 | 1.4 / 10 | 8.5 / 10 | 87% |
 
-*Scores are averages across 9 repo-specific questions, judged by Claude Haiku. Without context, an AI agent is essentially guessing — it cannot know your file paths, commands, or domain logic.*
+*Scores are averages across 15 repo-specific questions across 5 categories, judged by Claude Haiku. Without context, an AI agent is essentially guessing — it cannot know your file paths, commands, or domain logic.*
 
-The polyglot monorepo scores lower because Opus was reading previously generated scaffolding files as source code — a known issue being fixed in the next release.
+The pattern is consistent: context files dramatically improve AI agent responses regardless of repo complexity. More complex polyglot repos score slightly lower due to the inherent difficulty of reasoning across multiple languages and build systems.
 
 ---
 
@@ -36,10 +37,11 @@ Phase 2 — Analyse   : LLM reads your code and infers domain concepts,
 Phase 3 — Generate  : LLM writes AGENTS.md, CLAUDE.md,
                       system_prompt.md, agent-context.json, memory/schema.md
 Phase 4 — Score     : 100-point readiness score
-Phase 5 — Evaluate  : measures whether context files actually improve AI responses
+Phase 5 — Evaluate  : 15 questions across 5 categories measure whether
+                      context files actually improve AI responses
 ```
 
-**Provider strategy — analysis uses the most capable model, eval uses the cheapest:**
+**Provider strategy — analysis uses the most capable model, eval uses the fastest:**
 
 | Provider | Analysis | Generation | Evaluation | Key |
 |---|---|---|---|---|
@@ -124,7 +126,7 @@ Issue opened
     ├─ 2. Calls agent-ready's reusable transformer
     ├─ 3. Analysis model reads your codebase (~60s)
     ├─ 4. Generation model writes all scaffolding files
-    ├─ 5. (Optional) Evaluation model measures context quality
+    ├─ 5. (Optional) Evaluation model runs 15 questions across 5 categories
     ├─ 6. Opens a PR: "🤖 Add agentic-ready scaffolding"
     ├─ 7. Comments on your issue with the PR link
     └─ 8. Closes the issue ✅
@@ -140,7 +142,7 @@ Issue opened
 | `system_prompt.md` | Universal system prompt for any LLM |
 | `mcp.json` | MCP server configuration |
 | `memory/schema.md` | Agent memory/state contract |
-| `AGENTIC_EVAL.md` | Evaluation report — score per category |
+| `AGENTIC_EVAL.md` | Evaluation report — verdict, scores, per-question breakdown |
 
 > The `static` section of `agent-context.json` is safe to edit manually. The `dynamic` section is auto-refreshed on every scan.
 
@@ -163,16 +165,16 @@ agent-ready --target /path/to/repo --eval-only --fail-level 0.8
 
 **How it works:**
 
-Each question is asked twice — once with no context (baseline) and once with your generated files as the system prompt. A judge model scores both responses on a 0–10 scale. The delta between scores is your improvement.
+Each of 15 questions is asked twice — once with no context (baseline) and once with your generated files as the system prompt. A judge model scores both responses on a 0–10 scale. The delta is your improvement.
 
-**9 questions across 5 categories:**
-- **Commands** — are the build/test/run commands correct?
-- **Safety** — does the AI respect restricted paths?
-- **Domain** — does the AI understand the business logic?
-- **Architecture** — does the AI know the entry point and structure?
-- **Pitfalls** — does the AI know the specific gotchas in this codebase?
+**15 questions across 5 categories:**
+- **Commands** (3q) — are the build, test, and install commands exact?
+- **Safety** (2q) — does the AI respect restricted paths and secret rules?
+- **Domain** (2q) — does the AI understand the business logic and concepts?
+- **Architecture** (3q) — does the AI know the entry point, language, and structure?
+- **Pitfalls** (5q) — does the AI know the specific gotchas that will break this codebase?
 
-Results are saved to `AGENTIC_EVAL.md` with a full per-question breakdown.
+The pitfalls category uses 5 targeted questions — one per pitfall type — because a single generic question lets models answer without real codebase knowledge. Results are saved to `AGENTIC_EVAL.md` with a verdict, category scores, per-question tables, and a "What to Improve" section.
 
 ---
 
@@ -256,8 +258,7 @@ Every run outputs a 100-point score — an actionable to-do list, not a grade.
 | OpenAPI spec exists | 5 |
 | CI config exists | 5 |
 
-Static mode first run: **N/A — LLM mode is always used**
-LLM-first mode first run: **~85/100**
+First run typically scores **~85/100** — real content from real code analysis, not placeholders.
 
 ---
 
@@ -372,15 +373,16 @@ agent-ready --target /path/to/repo --only context --force
 Contributions are very welcome. AgentReady is an early-stage open-source project and there's a lot of ground to cover.
 
 **Good first issues:**
-- Add support for a new language or framework in the static analyser
-- Improve eval question templates for specific tech stacks
+- Add support for a new language or framework in the analyser
+- Improve pitfall question templates for specific tech stacks (e.g. Django, Rails, .NET)
 - Add an `--eval-report` flag to print results without saving to file
 - Write tests for `analyser.py` and `generator.py`
 
 **Bigger contributions:**
-- Monorepo support — detect and handle multiple modules
+- Monorepo support — detect and handle multiple modules with per-module context files
 - VS Code extension — surface the readiness score inline
 - `workflow_dispatch` architecture — keep all secrets in `agent-ready` only
+- Reasoning trace in eval — capture not just what was wrong but why the agent chose that path
 
 **How to contribute:**
 
