@@ -53,7 +53,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/.agent-ready/src
         run: |
           python .agent-ready/src/agent_ready/cli.py \
-            --target . --only context --force --quiet --llm
+            --target . --only context --force --quiet
 
       - name: Detect meaningful drift
         id: drift
