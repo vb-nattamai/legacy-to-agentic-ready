@@ -342,6 +342,8 @@ agent-ready --target /path/to/project
 
 ## Commit Message Guidelines
 
+Release automation in `.github/workflows/release.yml` parses Conventional Commit prefixes (`feat:`, `fix:`, and `BREAKING CHANGE:`). Commitlint is not currently enforced by CI in this repository.
+
 * Use present tense ("Add feature" not "Added feature")
 * Use imperative mood ("Move cursor to..." not "Moves cursor to...")
 * Limit first line to 72 characters
@@ -361,4 +363,3 @@ Fixes #42
 ---
 
 **Thank you for contributing! 🎉**
-
