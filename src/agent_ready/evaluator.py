@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 # ── LiteLLM call with retry ───────────────────────────────────────────────────
 
 def _api_call_with_retry(
@@ -95,6 +94,289 @@ Score each response from 0-10 based on the criteria provided.
 Respond ONLY with a valid JSON object. No markdown, no preamble.\
 """
 
+CATEGORY_DESCRIPTIONS = {
+    "commands": "Does the agent know the exact build, test, and install commands?",
+    "safety": "Does the agent respect restricted paths and secret handling rules?",
+    "domain": "Does the agent understand the business domain and key concepts?",
+    "architecture": "Does the agent know the structure, entry points, and module layout?",
+    "pitfalls": "Does the agent know the specific gotchas that will break this codebase?",
+}
+
+
+def _strip_markdown_fences(raw: str) -> str:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        text = "\n".join(lines[1:]) if len(lines) > 1 else ""
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
+
+
+def _flatten_analysis_context(analysis: dict[str, Any]) -> dict[str, Any]:
+    if "static" in analysis:
+        return {**analysis.get("static", {}), **analysis.get("dynamic", {})}
+    return analysis
+
+
+def _build_question_result(
+    question: dict[str, Any],
+    baseline_response: str,
+    context_response: str,
+    baseline_judgment: dict[str, Any],
+    context_judgment: dict[str, Any],
+) -> dict[str, Any]:
+    baseline_score = baseline_judgment.get("score", 0)
+    context_score = context_judgment.get("score", 0)
+    delta = context_score - baseline_score
+
+    return {
+        "question_id": question["id"],
+        "category": question["category"],
+        "prompt": question["prompt"],
+        "ground_truth": question["ground_truth"],
+        "baseline": {
+            "response": baseline_response,
+            "score": baseline_score,
+            "correct": baseline_judgment.get("correct", False),
+            "hallucinated": baseline_judgment.get("hallucinated", False),
+            "reasoning": baseline_judgment.get("reasoning", ""),
+            "key_missing": baseline_judgment.get("key_missing", ""),
+        },
+        "with_context": {
+            "response": context_response,
+            "score": context_score,
+            "correct": context_judgment.get("correct", False),
+            "hallucinated": context_judgment.get("hallucinated", False),
+            "reasoning": context_judgment.get("reasoning", ""),
+            "key_missing": context_judgment.get("key_missing", ""),
+        },
+        "delta": delta,
+        "passed": context_judgment.get("correct", False),
+    }
+
+
+def _aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    question_count = len(results)
+    if question_count == 0:
+        return {
+            "baseline_score": 0,
+            "context_score": 0,
+            "score_delta": 0,
+            "pass_rate": 0,
+            "category_breakdown": {},
+            "hallucination_rate": 0,
+            "question_count": 0,
+        }
+
+    baseline_total = sum(r["baseline"]["score"] for r in results)
+    context_total = sum(r["with_context"]["score"] for r in results)
+    baseline_avg = round(baseline_total / question_count, 1)
+    context_avg = round(context_total / question_count, 1)
+    pass_rate = round(sum(1 for r in results if r["passed"]) / question_count, 2)
+
+    category_scores: dict[str, dict[str, float]] = {}
+    for result in results:
+        category = result["category"]
+        if category not in category_scores:
+            category_scores[category] = {"baseline": 0.0, "context": 0.0, "count": 0, "passed": 0}
+        category_scores[category]["baseline"] += result["baseline"]["score"]
+        category_scores[category]["context"] += result["with_context"]["score"]
+        category_scores[category]["count"] += 1
+        category_scores[category]["passed"] += 1 if result["passed"] else 0
+
+    category_summary: dict[str, dict[str, float | int]] = {}
+    for category, scores in category_scores.items():
+        count = scores["count"]
+        baseline_cat_avg = round(scores["baseline"] / count, 1)
+        context_cat_avg = round(scores["context"] / count, 1)
+        category_summary[category] = {
+            "baseline_avg": baseline_cat_avg,
+            "context_avg": context_cat_avg,
+            "delta": round(context_cat_avg - baseline_cat_avg, 1),
+            "pass_rate": round(scores["passed"] / count, 2),
+            "question_count": int(count),
+        }
+
+    hallucination_rate = round(
+        sum(1 for r in results if r["with_context"]["hallucinated"]) / question_count, 2
+    )
+
+    return {
+        "baseline_score": baseline_avg,
+        "context_score": context_avg,
+        "score_delta": round(context_avg - baseline_avg, 1),
+        "pass_rate": pass_rate,
+        "category_breakdown": category_summary,
+        "hallucination_rate": hallucination_rate,
+        "question_count": question_count,
+    }
+
+
+def _build_eval_result(
+    questions: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    fail_level: float,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    summary = _aggregate_results(results)
+    pass_rate = summary["pass_rate"]
+    return {
+        "questions": questions,
+        "results": results,
+        **summary,
+        "passed": pass_rate >= fail_level if fail_level > 0 else True,
+        "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _group_results_by_category(results: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for result in results:
+        grouped.setdefault(result["category"], []).append(result)
+    return grouped
+
+
+def _resolve_report_verdict(score_delta: float, pass_rate: float) -> tuple[str, str]:
+    pass_pct = int(pass_rate * 100)
+    if score_delta >= 5 and pass_pct >= 80:
+        return (
+            "✅ **PASS** — Context files significantly improve AI agent responses.",
+            "The generated scaffolding is working well. Agents with context answer accurately and specifically.",
+        )
+    if score_delta >= 2 or pass_pct >= 60:
+        return (
+            "⚠️  **PARTIAL** — Context files help but have gaps.",
+            "Some categories are well covered. Review the failed questions below to identify what to improve.",
+        )
+    return (
+        "❌ **FAIL** — Context files have minimal impact.",
+        "The generated content may be too generic. Re-run with `--force` or improve the source files.",
+    )
+
+
+def _build_report_lines(result: dict[str, Any]) -> list[str]:
+    delta = result["score_delta"]
+    delta_sign = "+" if delta >= 0 else ""
+    halluc_pct = int(result["hallucination_rate"] * 100)
+    passed_count = sum(1 for r in result["results"] if r["passed"])
+    total = result["question_count"]
+    generated_at = result.get("generated_at", "")
+    generated_day = generated_at[:10] if generated_at else "unknown"
+    verdict, verdict_detail = _resolve_report_verdict(result["score_delta"], result["pass_rate"])
+
+    lines: list[str] = [
+        "# AgentReady — Evaluation Report",
+        "",
+        f"> Generated: {generated_day}  ",
+        f"> Questions: {total}  |  Passed: {passed_count}/{total}  |  Hallucinations: {halluc_pct}%",
+        "",
+        "---",
+        "",
+        "## Verdict",
+        "",
+        verdict,
+        "",
+        verdict_detail,
+        "",
+        "---",
+        "",
+        "## Scores at a Glance",
+        "",
+        "| | Without context | With context | Delta |",
+        "|---|---|---|---|",
+        f"| **Overall** | {result['baseline_score']}/10 | **{result['context_score']}/10** | {delta_sign}{delta} pts |",
+    ]
+
+    for category, scores in result["category_breakdown"].items():
+        sign = "+" if scores["delta"] >= 0 else ""
+        category_pass_pct = int(scores["pass_rate"] * 100)
+        status = "✅" if scores["pass_rate"] >= 0.7 else ("⚠️" if scores["pass_rate"] >= 0.5 else "❌")
+        lines.append(
+            f"| {status} {category} ({scores['question_count']}q) | {scores['baseline_avg']}/10 | **{scores['context_avg']}/10** | {sign}{scores['delta']} pts — {category_pass_pct}% pass |"
+        )
+
+    lines += [
+        "",
+        "---",
+        "",
+        "## Category Detail",
+        "",
+    ]
+
+    for category, category_results in _group_results_by_category(result["results"]).items():
+        category_scores = result["category_breakdown"][category]
+        category_pass_pct = int(category_scores["pass_rate"] * 100)
+        category_status = (
+            "✅" if category_scores["pass_rate"] >= 0.7 else ("⚠️" if category_scores["pass_rate"] >= 0.5 else "❌")
+        )
+        description = CATEGORY_DESCRIPTIONS.get(category, "")
+
+        lines += [
+            f"### {category_status} {category.title()}",
+            "",
+            f"_{description}_",
+            "",
+            f"**Score:** {category_scores['baseline_avg']}/10 → **{category_scores['context_avg']}/10** &nbsp; ({'+' if category_scores['delta'] >= 0 else ''}{category_scores['delta']} pts) &nbsp; **{category_pass_pct}% pass rate**",
+            "",
+        ]
+
+        for result_row in category_results:
+            status = "✅" if result_row["passed"] else "❌"
+            delta_str = f"+{result_row['delta']}" if result_row["delta"] >= 0 else str(result_row["delta"])
+            missing = result_row["with_context"].get("key_missing", "")
+            hallucinated_flag = " 🔴 hallucinated" if result_row["with_context"]["hallucinated"] else ""
+            lines += [
+                f"#### {status} {result_row['question_id']} — {result_row['prompt']}",
+                "",
+                f"**Ground truth:** `{result_row['ground_truth'][:120]}{'...' if len(result_row['ground_truth']) > 120 else ''}`",
+                "",
+                "| | Score | Notes |",
+                "|---|---|---|",
+                f"| Without context | {result_row['baseline']['score']}/10 | {result_row['baseline']['reasoning']} |",
+                f"| With context | **{result_row['with_context']['score']}/10** ({delta_str}){hallucinated_flag} | {result_row['with_context']['reasoning']} |",
+            ]
+
+            if missing:
+                lines += [
+                    "",
+                    f"> ⚠️ **What was missing:** {missing}",
+                ]
+
+            lines += [""]
+
+    failed_results = [r for r in result["results"] if not r["passed"]]
+    if failed_results:
+        lines += [
+            "---",
+            "",
+            "## What to Improve",
+            "",
+            "The following questions failed. Address these to increase the pass rate.",
+            "",
+        ]
+        for failed in failed_results:
+            missing = failed["with_context"].get("key_missing", "")
+            lines += [
+                f"- **[{failed['category']}]** _{failed['prompt']}_",
+            ]
+            if missing:
+                lines += [f"  - Missing: {missing}"]
+
+        lines += [
+            "",
+            "**How to fix:** Re-run the transformer with `--force` to regenerate context files,",
+            "or manually edit the `static` section of `agent-context.json` to add the missing information.",
+            "",
+        ]
+
+    lines += [
+        "---",
+        "",
+        f"_Report generated by [AgentReady](https://github.com/vb-nattamai/agent-ready) — {generated_at[:10] if generated_at else ''}_",
+    ]
+    return lines
+
 
 def generate_questions(
     eval_model: str,
@@ -129,12 +411,7 @@ Rules:
         max_tokens=4096,
     )
 
-    if raw.startswith("```"):
-        raw = "\n".join(raw.split("\n")[1:])
-    if raw.endswith("```"):
-        raw = raw.rsplit("```", 1)[0]
-
-    questions = json.loads(raw.strip())
+    questions = json.loads(_strip_markdown_fences(raw))
     if not quiet:
         print(f"  ✓ Generated {len(questions)} evaluation questions")
     return questions
@@ -174,12 +451,7 @@ Return JSON:
         max_tokens=300,
     )
 
-    if raw.startswith("```"):
-        raw = "\n".join(raw.split("\n")[1:])
-    if raw.endswith("```"):
-        raw = raw.rsplit("```", 1)[0]
-
-    return json.loads(raw.strip())
+    return json.loads(_strip_markdown_fences(raw))
 
 
 # ── Ask ───────────────────────────────────────────────────────────────────────
@@ -244,17 +516,12 @@ def run_eval(
         raise ValueError("agent-context.json not found in target repo.")
 
     analysis = json.loads(ctx_path.read_text())
-    if "static" in analysis:
-        flat = {**analysis.get("static", {}), **analysis.get("dynamic", {})}
-    else:
-        flat = analysis
+    flat = _flatten_analysis_context(analysis)
 
     if not questions:
         questions = generate_questions(eval_model, flat, quiet=quiet)
 
     results: list[dict[str, Any]] = []
-    baseline_total = 0.0
-    context_total = 0.0
 
     for i, q in enumerate(questions):
         if not quiet:
@@ -269,88 +536,28 @@ def run_eval(
         time.sleep(1)
         context_judgment = _judge_response(judge_model, q, context_response)
 
-        baseline_score = baseline_judgment.get("score", 0)
-        context_score = context_judgment.get("score", 0)
-        delta = context_score - baseline_score
-
-        baseline_total += baseline_score
-        context_total += context_score
-
-        result = {
-            "question_id": q["id"],
-            "category": q["category"],
-            "prompt": q["prompt"],
-            "ground_truth": q["ground_truth"],
-            "baseline": {
-                "response": baseline_response,
-                "score": baseline_score,
-                "correct": baseline_judgment.get("correct", False),
-                "hallucinated": baseline_judgment.get("hallucinated", False),
-                "reasoning": baseline_judgment.get("reasoning", ""),
-                "key_missing": baseline_judgment.get("key_missing", ""),
-            },
-            "with_context": {
-                "response": context_response,
-                "score": context_score,
-                "correct": context_judgment.get("correct", False),
-                "hallucinated": context_judgment.get("hallucinated", False),
-                "reasoning": context_judgment.get("reasoning", ""),
-                "key_missing": context_judgment.get("key_missing", ""),
-            },
-            "delta": delta,
-            "passed": context_judgment.get("correct", False),
-        }
+        result = _build_question_result(
+            question=q,
+            baseline_response=baseline_response,
+            context_response=context_response,
+            baseline_judgment=baseline_judgment,
+            context_judgment=context_judgment,
+        )
         results.append(result)
 
         if not quiet:
+            baseline_score = result["baseline"]["score"]
+            context_score = result["with_context"]["score"]
+            delta = result["delta"]
             delta_str = f"+{delta}" if delta >= 0 else str(delta)
             status = "✅" if result["passed"] else "❌"
             print(f"     {status} baseline: {baseline_score}/10 → with context: {context_score}/10 ({delta_str})")
 
-    n = len(results)
-    baseline_avg = round(baseline_total / n, 1) if n else 0
-    context_avg = round(context_total / n, 1) if n else 0
-    score_delta = round(context_avg - baseline_avg, 1)
-    pass_rate = round(sum(1 for r in results if r["passed"]) / n, 2) if n else 0
-
-    category_scores: dict[str, dict[str, float]] = {}
-    for r in results:
-        cat = r["category"]
-        if cat not in category_scores:
-            category_scores[cat] = {"baseline": 0.0, "context": 0.0, "count": 0, "passed": 0}
-        category_scores[cat]["baseline"] += r["baseline"]["score"]
-        category_scores[cat]["context"] += r["with_context"]["score"]
-        category_scores[cat]["count"] += 1
-        category_scores[cat]["passed"] += 1 if r["passed"] else 0
-
-    category_summary = {}
-    for cat, scores in category_scores.items():
-        count = scores["count"]
-        b_avg = round(scores["baseline"] / count, 1)
-        c_avg = round(scores["context"] / count, 1)
-        category_summary[cat] = {
-            "baseline_avg": b_avg,
-            "context_avg": c_avg,
-            "delta": round(c_avg - b_avg, 1),
-            "pass_rate": round(scores["passed"] / count, 2),
-            "question_count": int(count),
-        }
-
-    eval_result = {
-        "questions": questions,
-        "results": results,
-        "baseline_score": baseline_avg,
-        "context_score": context_avg,
-        "score_delta": score_delta,
-        "pass_rate": pass_rate,
-        "passed": pass_rate >= fail_level if fail_level > 0 else True,
-        "category_breakdown": category_summary,
-        "hallucination_rate": round(
-            sum(1 for r in results if r["with_context"]["hallucinated"]) / n, 2
-        ) if n else 0,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "question_count": n,
-    }
+    eval_result = _build_eval_result(
+        questions=questions,
+        results=results,
+        fail_level=fail_level,
+    )
 
     if not quiet:
         _print_summary(eval_result)
@@ -410,148 +617,7 @@ def _print_summary(result: dict[str, Any]) -> None:
 # ── Report generation ─────────────────────────────────────────────────────────
 
 def save_eval_report(target: Path, result: dict[str, Any]) -> Path:
-    delta = result["score_delta"]
-    d_sign = "+" if delta >= 0 else ""
-    pass_pct = int(result["pass_rate"] * 100)
-    halluc_pct = int(result["hallucination_rate"] * 100)
-    passed_count = sum(1 for r in result["results"] if r["passed"])
-    total = result["question_count"]
-    generated_at = result.get("generated_at", "")
-
-    # ── Overall verdict ───────────────────────────────────────────────────────
-    if result["score_delta"] >= 5 and pass_pct >= 80:
-        verdict = "✅ **PASS** — Context files significantly improve AI agent responses."
-        verdict_detail = "The generated scaffolding is working well. Agents with context answer accurately and specifically."
-    elif result["score_delta"] >= 2 or pass_pct >= 60:
-        verdict = "⚠️  **PARTIAL** — Context files help but have gaps."
-        verdict_detail = "Some categories are well covered. Review the failed questions below to identify what to improve."
-    else:
-        verdict = "❌ **FAIL** — Context files have minimal impact."
-        verdict_detail = "The generated content may be too generic. Re-run with `--force` or improve the source files."
-
-    lines: list[str] = [
-        "# AgentReady — Evaluation Report",
-        "",
-        f"> Generated: {generated_at[:10] if generated_at else 'unknown'}  ",
-        f"> Questions: {total}  |  Passed: {passed_count}/{total}  |  Hallucinations: {halluc_pct}%",
-        "",
-        "---",
-        "",
-        "## Verdict",
-        "",
-        verdict,
-        "",
-        verdict_detail,
-        "",
-        "---",
-        "",
-        "## Scores at a Glance",
-        "",
-        "| | Without context | With context | Delta |",
-        "|---|---|---|---|",
-        f"| **Overall** | {result['baseline_score']}/10 | **{result['context_score']}/10** | {d_sign}{delta} pts |",
-    ]
-
-    for cat, scores in result["category_breakdown"].items():
-        s = "+" if scores["delta"] >= 0 else ""
-        cat_pass = int(scores["pass_rate"] * 100)
-        status = "✅" if scores["pass_rate"] >= 0.7 else ("⚠️" if scores["pass_rate"] >= 0.5 else "❌")
-        lines.append(
-            f"| {status} {cat} ({scores['question_count']}q) | {scores['baseline_avg']}/10 | **{scores['context_avg']}/10** | {s}{scores['delta']} pts — {cat_pass}% pass |"
-        )
-
-    lines += [
-        "",
-        "---",
-        "",
-        "## Category Detail",
-        "",
-    ]
-
-    # Group results by category
-    by_cat: dict[str, list[dict[str, Any]]] = {}
-    for r in result["results"]:
-        by_cat.setdefault(r["category"], []).append(r)
-
-    CATEGORY_DESCRIPTIONS = {
-        "commands":     "Does the agent know the exact build, test, and install commands?",
-        "safety":       "Does the agent respect restricted paths and secret handling rules?",
-        "domain":       "Does the agent understand the business domain and key concepts?",
-        "architecture": "Does the agent know the structure, entry points, and module layout?",
-        "pitfalls":     "Does the agent know the specific gotchas that will break this codebase?",
-    }
-
-    for cat, cat_results in by_cat.items():
-        cat_scores = result["category_breakdown"][cat]
-        cat_pass_pct = int(cat_scores["pass_rate"] * 100)
-        cat_status = "✅" if cat_scores["pass_rate"] >= 0.7 else ("⚠️" if cat_scores["pass_rate"] >= 0.5 else "❌")
-        desc = CATEGORY_DESCRIPTIONS.get(cat, "")
-
-        lines += [
-            f"### {cat_status} {cat.title()}",
-            "",
-            f"_{desc}_",
-            "",
-            f"**Score:** {cat_scores['baseline_avg']}/10 → **{cat_scores['context_avg']}/10** &nbsp; ({'+' if cat_scores['delta'] >= 0 else ''}{cat_scores['delta']} pts) &nbsp; **{cat_pass_pct}% pass rate**",
-            "",
-        ]
-
-        for r in cat_results:
-            status = "✅" if r["passed"] else "❌"
-            delta_str = f"+{r['delta']}" if r["delta"] >= 0 else str(r["delta"])
-            missing = r["with_context"].get("key_missing", "")
-            halluc = " 🔴 hallucinated" if r["with_context"]["hallucinated"] else ""
-            lines += [
-                f"#### {status} {r['question_id']} — {r['prompt']}",
-                "",
-                f"**Ground truth:** `{r['ground_truth'][:120]}{'...' if len(r['ground_truth']) > 120 else ''}`",
-                "",
-                f"| | Score | Notes |",
-                f"|---|---|---|",
-                f"| Without context | {r['baseline']['score']}/10 | {r['baseline']['reasoning']} |",
-                f"| With context | **{r['with_context']['score']}/10** ({delta_str}){halluc} | {r['with_context']['reasoning']} |",
-            ]
-
-            if missing:
-                lines += [
-                    "",
-                    f"> ⚠️ **What was missing:** {missing}",
-                ]
-
-            lines += [""]
-
-    # ── What to improve ───────────────────────────────────────────────────────
-    failed_results = [r for r in result["results"] if not r["passed"]]
-    if failed_results:
-        lines += [
-            "---",
-            "",
-            "## What to Improve",
-            "",
-            "The following questions failed. Address these to increase the pass rate.",
-            "",
-        ]
-        for r in failed_results:
-            missing = r["with_context"].get("key_missing", "")
-            lines += [
-                f"- **[{r['category']}]** _{r['prompt']}_",
-            ]
-            if missing:
-                lines += [f"  - Missing: {missing}"]
-
-        lines += [
-            "",
-            "**How to fix:** Re-run the transformer with `--force` to regenerate context files,",
-            "or manually edit the `static` section of `agent-context.json` to add the missing information.",
-            "",
-        ]
-
-    lines += [
-        "---",
-        "",
-        f"_Report generated by [AgentReady](https://github.com/vb-nattamai/agent-ready) — {generated_at[:10] if generated_at else ''}_",
-    ]
-
+    lines = _build_report_lines(result)
     report_path = target / "AGENTIC_EVAL.md"
     report_path.write_text("\n".join(lines))
     return report_path

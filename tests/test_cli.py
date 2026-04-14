@@ -14,8 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import agent_ready  # noqa: E402
-from agent_ready.cli import score, PROVIDERS, _resolve_models  # noqa: E402
-
+from agent_ready.cli import PROVIDERS, _resolve_models, score  # noqa: E402
 
 # ── Package metadata ───────────────────────────────────────────────────────
 
