@@ -55,9 +55,10 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           python .agent-ready/src/agent_ready/cli.py \
             --target . \
-            --review-pr ${{ github.event.pull_request.number }} \
+            --review-pr "$PR_NUMBER" \
             --quiet
         continue-on-error: true

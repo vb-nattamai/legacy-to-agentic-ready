@@ -215,9 +215,16 @@ def post_review(pr_number: int, decision: str, body: str, cwd: Path) -> bool:
 def run(target: Path, pr_number: int, model: str, quiet: bool = False) -> dict[str, Any]:
     """Orchestrate PR review: load context → fetch → prompt → LLM → parse."""
     try:
+        import litellm
+
         from agent_ready.generator import _call
     except ImportError:
         raise ImportError("litellm not installed. Run: pip install 'agent-ready[ai]'")
+
+    # Prevent LiteLLM from printing prompt/response content to stdout.
+    # Prompts include the PR diff which may contain credential-like strings.
+    litellm.suppress_debug_info = True
+    litellm.set_verbose = False  # type: ignore[attr-defined]
 
     if not quiet:
         print(f"  🔍 Reviewing PR #{pr_number}...")
