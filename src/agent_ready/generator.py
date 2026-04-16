@@ -25,6 +25,7 @@ GENERATION_HEADER = (
 
 # ── LiteLLM call with retry ───────────────────────────────────────────────────
 
+
 def _call(
     model: str,
     prompt: str,
@@ -46,11 +47,16 @@ def _call(
             return response.choices[0].message.content.strip()
         except Exception as e:
             err_str = str(e).lower()
-            if any(x in err_str for x in ["529", "overloaded", "service unavailable", "rate limit", "429"]):
+            if any(
+                x in err_str
+                for x in ["529", "overloaded", "service unavailable", "rate limit", "429"]
+            ):
                 last_error = e
                 if attempt < 4:
                     wait = (60 * (attempt + 1)) + random.uniform(0, 10)
-                    print(f"  ⚠️  API overloaded, retrying in {int(wait)}s... (attempt {attempt + 1}/5)")
+                    print(
+                        f"  ⚠️  API overloaded, retrying in {int(wait)}s... (attempt {attempt + 1}/5)"
+                    )
                     time.sleep(wait)
                 else:
                     raise last_error
@@ -67,10 +73,11 @@ def _pitfalls_block(analysis: dict[str, Any]) -> str:
     pitfalls = analysis.get("potential_pitfalls", [])
     if not pitfalls:
         return "No pitfalls detected."
-    return "\n".join(f"{i+1}. {p}" for i, p in enumerate(pitfalls))
+    return "\n".join(f"{i + 1}. {p}" for i, p in enumerate(pitfalls))
 
 
 # ── agent-context.json ────────────────────────────────────────────────────────
+
 
 def build_agent_context(
     analysis: dict[str, Any],
@@ -86,8 +93,7 @@ def build_agent_context(
         "restricted_write_paths": analysis.get("restricted_write_paths", []),
         "environment_variables": analysis.get("environment_variables", []),
         "domain_concepts": [
-            f"{c['term']}: {c['definition']}"
-            for c in analysis.get("domain_concepts", [])
+            f"{c['term']}: {c['definition']}" for c in analysis.get("domain_concepts", [])
         ],
     }
 
@@ -120,8 +126,11 @@ def build_agent_context(
 
 # ── AGENTS.md ─────────────────────────────────────────────────────────────────
 
+
 def generate_agents_md(model: str, analysis: dict[str, Any]) -> str:
-    return _call(model, f"""\
+    return _call(
+        model,
+        f"""\
 Generate an AGENTS.md file for this repository.
 
 AGENTS.md is the operating contract for GitHub Copilot and OpenAI agents.
@@ -163,13 +172,17 @@ class names, commands, and patterns found in this codebase. No generic advice.
    For each pitfall: what the agent will try to do, why it breaks things, what to do instead.
 
 Write as if a senior engineer on this team authored it for an AI agent joining today.\
-""")
+""",
+    )
 
 
 # ── CLAUDE.md ─────────────────────────────────────────────────────────────────
 
+
 def generate_claude_md(model: str, analysis: dict[str, Any]) -> str:
-    return _call(model, f"""\
+    return _call(
+        model,
+        f"""\
 Generate a CLAUDE.md file for this repository.
 
 CLAUDE.md is auto-loaded by Claude Code at the start of every session.
@@ -211,13 +224,17 @@ No generic software engineering advice.
 
 7. ## After Every Change
    Specific checklist including the test command.\
-""")
+""",
+    )
 
 
 # ── system_prompt.md ──────────────────────────────────────────────────────────
 
+
 def generate_system_prompt(model: str, analysis: dict[str, Any]) -> str:
-    return _call(model, f"""\
+    return _call(
+        model,
+        f"""\
 Generate a system_prompt.md file for this repository.
 
 This file is the system prompt for ANY LLM working on this codebase.
@@ -240,13 +257,17 @@ Write in second person ("You are working on..."). Cover:
 {_pitfalls_block(analysis)}
 
 Target ~400–600 words.\
-""")
+""",
+    )
 
 
 # ── memory/schema.md ──────────────────────────────────────────────────────────
 
+
 def generate_memory_schema(model: str, analysis: dict[str, Any]) -> str:
-    return _call(model, f"""\
+    return _call(
+        model,
+        f"""\
 Generate a memory/schema.md file for this repository.
 
 This file defines what an AI agent should track as working memory.
@@ -267,10 +288,12 @@ Include:
 6. domain_state — language/framework-specific state worth tracking
 
 Use YAML format with inline comments.\
-""")
+""",
+    )
 
 
 # ── mcp.json ──────────────────────────────────────────────────────────────────
+
 
 def generate_mcp_json(analysis: dict[str, Any]) -> str:
     lang = analysis.get("primary_language", "").lower()
@@ -292,7 +315,9 @@ def generate_mcp_json(analysis: dict[str, Any]) -> str:
             f"{analysis.get('project_name', 'project').lower().replace(' ', '-')}-tools": {
                 "command": runtime,
                 "args": ["tools/example_tool" + (".py" if runtime == "python" else "")],
-                "env": {var: f"${{{var}}}" for var in analysis.get("environment_variables", [])[:5]},
+                "env": {
+                    var: f"${{{var}}}" for var in analysis.get("environment_variables", [])[:5]
+                },
             }
         },
     }
@@ -300,6 +325,7 @@ def generate_mcp_json(analysis: dict[str, Any]) -> str:
 
 
 # ── Orchestrator ──────────────────────────────────────────────────────────────
+
 
 class LLMGenerator:
     def __init__(

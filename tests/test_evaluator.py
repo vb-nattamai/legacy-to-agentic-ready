@@ -19,7 +19,7 @@ def _sample_question() -> dict[str, str]:
 
 
 def test_strip_markdown_fences() -> None:
-    raw = "```json\n{\"ok\": true}\n```"
+    raw = '```json\n{"ok": true}\n```'
     assert evaluator._strip_markdown_fences(raw) == '{"ok": true}'
 
 
@@ -42,8 +42,20 @@ def test_build_question_result_maps_scores_and_delta() -> None:
         question=question,
         baseline_response="maybe use unittest",
         context_response="Use pytest -q",
-        baseline_judgment={"score": 3, "correct": False, "hallucinated": False, "reasoning": "wrong cmd", "key_missing": "pytest"},
-        context_judgment={"score": 9, "correct": True, "hallucinated": False, "reasoning": "exact", "key_missing": ""},
+        baseline_judgment={
+            "score": 3,
+            "correct": False,
+            "hallucinated": False,
+            "reasoning": "wrong cmd",
+            "key_missing": "pytest",
+        },
+        context_judgment={
+            "score": 9,
+            "correct": True,
+            "hallucinated": False,
+            "reasoning": "exact",
+            "key_missing": "",
+        },
     )
 
     assert result["question_id"] == "cmd_001"
@@ -58,8 +70,20 @@ def test_aggregate_results_computes_summary_and_categories() -> None:
         question=_sample_question(),
         baseline_response="baseline 1",
         context_response="context 1",
-        baseline_judgment={"score": 4, "correct": False, "hallucinated": False, "reasoning": "", "key_missing": ""},
-        context_judgment={"score": 8, "correct": True, "hallucinated": False, "reasoning": "", "key_missing": ""},
+        baseline_judgment={
+            "score": 4,
+            "correct": False,
+            "hallucinated": False,
+            "reasoning": "",
+            "key_missing": "",
+        },
+        context_judgment={
+            "score": 8,
+            "correct": True,
+            "hallucinated": False,
+            "reasoning": "",
+            "key_missing": "",
+        },
     )
     q2 = evaluator._build_question_result(
         question={
@@ -71,8 +95,20 @@ def test_aggregate_results_computes_summary_and_categories() -> None:
         },
         baseline_response="maybe",
         context_response="no",
-        baseline_judgment={"score": 2, "correct": False, "hallucinated": False, "reasoning": "", "key_missing": ""},
-        context_judgment={"score": 6, "correct": False, "hallucinated": True, "reasoning": "", "key_missing": "clear refusal"},
+        baseline_judgment={
+            "score": 2,
+            "correct": False,
+            "hallucinated": False,
+            "reasoning": "",
+            "key_missing": "",
+        },
+        context_judgment={
+            "score": 6,
+            "correct": False,
+            "hallucinated": True,
+            "reasoning": "",
+            "key_missing": "clear refusal",
+        },
     )
 
     summary = evaluator._aggregate_results([q1, q2])
@@ -92,8 +128,20 @@ def test_build_eval_result_applies_fail_level_threshold() -> None:
         question=_sample_question(),
         baseline_response="baseline",
         context_response="context",
-        baseline_judgment={"score": 2, "correct": False, "hallucinated": False, "reasoning": "", "key_missing": ""},
-        context_judgment={"score": 8, "correct": True, "hallucinated": False, "reasoning": "", "key_missing": ""},
+        baseline_judgment={
+            "score": 2,
+            "correct": False,
+            "hallucinated": False,
+            "reasoning": "",
+            "key_missing": "",
+        },
+        context_judgment={
+            "score": 8,
+            "correct": True,
+            "hallucinated": False,
+            "reasoning": "",
+            "key_missing": "",
+        },
     )
     result = evaluator._build_eval_result(
         questions=[_sample_question()],
@@ -124,8 +172,20 @@ def test_build_report_lines_includes_improvement_section_on_failures() -> None:
         },
         baseline_response="unknown",
         context_response="unknown",
-        baseline_judgment={"score": 1, "correct": False, "hallucinated": False, "reasoning": "wrong", "key_missing": "scopes"},
-        context_judgment={"score": 5, "correct": False, "hallucinated": False, "reasoning": "still incomplete", "key_missing": "exact scopes"},
+        baseline_judgment={
+            "score": 1,
+            "correct": False,
+            "hallucinated": False,
+            "reasoning": "wrong",
+            "key_missing": "scopes",
+        },
+        context_judgment={
+            "score": 5,
+            "correct": False,
+            "hallucinated": False,
+            "reasoning": "still incomplete",
+            "key_missing": "exact scopes",
+        },
     )
     eval_result = evaluator._build_eval_result(
         questions=[],

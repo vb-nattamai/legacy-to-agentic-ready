@@ -12,7 +12,7 @@
 #   3. If structural drift is detected → opens a PR with the updated file
 #   4. If no drift → exits cleanly with no side effects
 
-name: AgentReady — Context Drift Detection
+name: AgentReady - Context Drift Detection
 
 on:
   schedule:
@@ -44,7 +44,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel build
+          python -m pip install --upgrade pip
           pip install -e './.agent-ready[ai]' -q
 
       - name: Run context-only refresh (LLM mode)
@@ -82,34 +82,12 @@ jobs:
           BRANCH="agentic-ready/context-drift-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
           git add agent-context.json
-          git commit -m "chore: update agent-context.json — drift detected [skip ci]"
+          git commit -m "chore: update agent-context.json - drift detected [skip ci]"
           git push origin "$BRANCH"
 
-          cat > /tmp/pr_body.txt <<'PRBODY'
-## Agent Context Drift Detected
-
-The scheduled context refresh found that `agent-context.json` no longer
-matches the current state of the repository.
-
-This can happen when:
-- New modules, services, or packages were added
-- Entry points or build commands changed
-- New environment variables were introduced
-- Domain concepts or pitfalls evolved
-
-### What changed
-See the diff in this PR for the exact changes.
-
-### Before merging
-- [ ] Verify `domain_concepts` still reflects real terms from the codebase
-- [ ] Verify `restricted_write_paths` is still accurate
-- [ ] Verify `environment_variables` covers all new vars introduced since last scan
-- [ ] Verify `potential_pitfalls` still applies to the current codebase
-PRBODY
-
           gh pr create \
-            --title "Agent context drift detected — review required" \
-            --body-file /tmp/pr_body.txt \
+            --title "🤖 Agent context drift detected - review required" \
+            --body-file .agent-ready/.github/DRIFT_PR_TEMPLATE.md \
             --label "agentic-ready" \
             --base main
 

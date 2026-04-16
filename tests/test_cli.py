@@ -5,6 +5,7 @@ Run with:
 or after pip install:
     pytest
 """
+
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ import agent_ready  # noqa: E402
 from agent_ready.cli import PROVIDERS, _resolve_models, score  # noqa: E402
 
 # ── Package metadata ───────────────────────────────────────────────────────
+
 
 def test_version_format():
     parts = agent_ready.__version__.split(".")
@@ -31,7 +33,9 @@ REQUIRED_KEYS = {"analysis", "generation", "evaluation", "api_key_env"}
 
 def test_providers_have_required_keys():
     for name, config in PROVIDERS.items():
-        assert REQUIRED_KEYS <= config.keys(), f"Provider '{name}' missing: {REQUIRED_KEYS - config.keys()}"
+        assert REQUIRED_KEYS <= config.keys(), (
+            f"Provider '{name}' missing: {REQUIRED_KEYS - config.keys()}"
+        )
 
 
 def test_all_providers_present():
@@ -41,20 +45,20 @@ def test_all_providers_present():
 
 
 def test_anthropic_models():
-    assert "opus"   in PROVIDERS["anthropic"]["analysis"].lower()
+    assert "opus" in PROVIDERS["anthropic"]["analysis"].lower()
     assert "sonnet" in PROVIDERS["anthropic"]["generation"].lower()
-    assert "haiku"  in PROVIDERS["anthropic"]["evaluation"].lower()
+    assert "haiku" in PROVIDERS["anthropic"]["evaluation"].lower()
 
 
 def test_openai_models():
-    assert "gpt"  in PROVIDERS["openai"]["analysis"].lower()
+    assert "gpt" in PROVIDERS["openai"]["analysis"].lower()
     assert "mini" in PROVIDERS["openai"]["generation"].lower()
     assert "nano" in PROVIDERS["openai"]["evaluation"].lower()
 
 
 def test_google_models():
     assert "gemini" in PROVIDERS["google"]["analysis"].lower()
-    assert "lite"   in PROVIDERS["google"]["evaluation"].lower()
+    assert "lite" in PROVIDERS["google"]["evaluation"].lower()
 
 
 def test_groq_models():
@@ -87,6 +91,7 @@ def test_cloud_providers_have_api_key_env():
 
 # ── _resolve_models ────────────────────────────────────────────────────────
 
+
 def test_resolve_models_preset():
     """No --model: returns the named provider preset unchanged."""
     result = _resolve_models("anthropic", None)
@@ -96,16 +101,16 @@ def test_resolve_models_preset():
 def test_resolve_models_custom_ollama():
     """--model ollama/... should produce empty api_key_env (local provider)."""
     result = _resolve_models("anthropic", "ollama/llama3.2")
-    assert result["analysis"]    == "ollama/llama3.2"
-    assert result["generation"]  == "ollama/llama3.2"
-    assert result["evaluation"]  == "ollama/llama3.2"
+    assert result["analysis"] == "ollama/llama3.2"
+    assert result["generation"] == "ollama/llama3.2"
+    assert result["evaluation"] == "ollama/llama3.2"
     assert result["api_key_env"] == ""
 
 
 def test_resolve_models_custom_groq():
     """--model groq/... should resolve to GROQ_API_KEY."""
     result = _resolve_models("anthropic", "groq/mixtral-8x7b-32768")
-    assert result["analysis"]    == "groq/mixtral-8x7b-32768"
+    assert result["analysis"] == "groq/mixtral-8x7b-32768"
     assert result["api_key_env"] == "GROQ_API_KEY"
 
 
@@ -118,7 +123,7 @@ def test_resolve_models_custom_openai_prefix():
 def test_resolve_models_custom_unknown_prefix():
     """Unknown prefixes fall back to PREFIX_API_KEY."""
     result = _resolve_models("anthropic", "bedrock/anthropic.claude-3-5-sonnet")
-    assert result["analysis"]    == "bedrock/anthropic.claude-3-5-sonnet"
+    assert result["analysis"] == "bedrock/anthropic.claude-3-5-sonnet"
     assert result["api_key_env"] == "BEDROCK_API_KEY"
 
 
@@ -130,6 +135,7 @@ def test_resolve_models_all_phases_same():
 
 
 # ── Scoring ────────────────────────────────────────────────────────────────
+
 
 def test_score_returns_dict(tmp_path):
     result = score(tmp_path)

@@ -31,7 +31,9 @@ def _analysis_payload() -> dict[str, object]:
         "source_directories": ["src/agent_ready"],
         "module_layout": {"agent_ready": "src/agent_ready"},
         "architecture_summary": "CLI orchestrates analyse/generate/eval phases.",
-        "key_components": [{"name": "cli", "path": "src/agent_ready/cli.py", "responsibility": "entry"}],
+        "key_components": [
+            {"name": "cli", "path": "src/agent_ready/cli.py", "responsibility": "entry"}
+        ],
         "agent_safe_operations": ["edit docs"],
         "agent_forbidden_operations": ["commit secrets"],
         "potential_pitfalls": ["Do not overwrite static context"],
@@ -99,4 +101,6 @@ def test_generate_only_context_updates_dynamic_without_clobbering_static(tmp_pat
     assert updated["static"] == existing_context["static"]
     assert updated["dynamic"]["build_system"] == "pip"
     assert updated["dynamic"]["last_scanned"] != existing_context["dynamic"]["last_scanned"]
-    assert any(path == "agent-context.json" and status.startswith("🔄") for path, status in generated)
+    assert any(
+        path == "agent-context.json" and status.startswith("🔄") for path, status in generated
+    )

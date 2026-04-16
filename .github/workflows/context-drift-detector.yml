@@ -1,4 +1,4 @@
-name: AgentReady — Context Drift Detection
+name: AgentReady - Context Drift Detection
 
 on:
   schedule:
@@ -69,7 +69,7 @@ jobs:
           BRANCH="agentic-ready/context-drift-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
           git add agent-context.json
-          git commit -m "chore: update agent-context.json — drift detected [skip ci]"
+          git commit -m "chore: update agent-context.json - drift detected [skip ci]"
           git push origin "$BRANCH"
 
           gh pr create \

@@ -41,7 +41,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     # ── Cloud: proprietary ─────────────────────────────────────────────
     # Anthropic tier:  Opus (deepest reasoning) / Sonnet (balanced) / Haiku (fast+cheap)
     "anthropic": {
-        "analysis":   "claude-opus-4-6",
+        "analysis": "claude-opus-4-6",
         "generation": "claude-sonnet-4-6",
         "evaluation": "claude-haiku-4-5-20251001",
         "api_key_env": "ANTHROPIC_API_KEY",
@@ -50,7 +50,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     #               gpt-5.4-mini ≈ Sonnet (strong mini, coding + subagents)
     #               gpt-5.4-nano ≈ Haiku (cheapest GPT-5.4-class, high-volume eval)
     "openai": {
-        "analysis":   "gpt-5.4",
+        "analysis": "gpt-5.4",
         "generation": "gpt-5.4-mini",
         "evaluation": "gpt-5.4-nano",
         "api_key_env": "OPENAI_API_KEY",
@@ -59,7 +59,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     #               gemini-2.5-flash-lite ≈ Haiku (fastest + cheapest in 2.5 family)
     #               Gemini 3.1 Pro exists but is preview-only as of Apr 2026
     "google": {
-        "analysis":   "gemini/gemini-2.5-pro",
+        "analysis": "gemini/gemini-2.5-pro",
         "generation": "gemini/gemini-2.5-pro",
         "evaluation": "gemini/gemini-2.5-flash-lite",
         "api_key_env": "GOOGLE_API_KEY",
@@ -70,14 +70,14 @@ PROVIDERS: dict[str, dict[str, str]] = {
     #   llama-3.1-8b-instant ≈ Haiku-tier (fast eval)
     #   Llama 4 Scout is preview-only on Groq; gpt-oss-120b also available production
     "groq": {
-        "analysis":   "groq/llama-3.3-70b-versatile",
+        "analysis": "groq/llama-3.3-70b-versatile",
         "generation": "groq/llama-3.3-70b-versatile",
         "evaluation": "groq/llama-3.1-8b-instant",
         "api_key_env": "GROQ_API_KEY",
     },
     # Mistral: mistral-large ≈ Sonnet-tier; mistral-small ≈ Haiku-tier
     "mistral": {
-        "analysis":   "mistral/mistral-large-latest",
+        "analysis": "mistral/mistral-large-latest",
         "generation": "mistral/mistral-large-latest",
         "evaluation": "mistral/mistral-small-latest",
         "api_key_env": "MISTRAL_API_KEY",
@@ -88,7 +88,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     #   Qwen3.5-9B ≈ Haiku-tier (262K ctx, $0.10/$0.15, cheapest capable eval model)
     #   Note: Llama 4 IDs are NOT in Together's production catalog as of Apr 2026
     "together": {
-        "analysis":   "together_ai/Qwen/Qwen3.5-397B-A17B",
+        "analysis": "together_ai/Qwen/Qwen3.5-397B-A17B",
         "generation": "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "evaluation": "together_ai/Qwen/Qwen3.5-9B",
         "api_key_env": "TOGETHER_API_KEY",
@@ -98,7 +98,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     #         llama3.2 (3B) ≈ Haiku-tier for evaluation.
     # Run: ollama pull llama3.3 && ollama pull llama3.2
     "ollama": {
-        "analysis":   "ollama/llama3.3",
+        "analysis": "ollama/llama3.3",
         "generation": "ollama/llama3.3",
         "evaluation": "ollama/llama3.2",
         "api_key_env": "",  # local server — no auth
@@ -107,20 +107,20 @@ PROVIDERS: dict[str, dict[str, str]] = {
 
 # LiteLLM model-prefix → API key env mapping (used by --model auto-detection)
 _PREFIX_TO_KEY: dict[str, str] = {
-    "anthropic":   "ANTHROPIC_API_KEY",
-    "claude":      "ANTHROPIC_API_KEY",
-    "openai":      "OPENAI_API_KEY",
-    "gpt":         "OPENAI_API_KEY",
-    "o1":          "OPENAI_API_KEY",
-    "gemini":      "GOOGLE_API_KEY",
-    "vertex_ai":   "GOOGLE_APPLICATION_CREDENTIALS",
-    "groq":        "GROQ_API_KEY",
-    "mistral":     "MISTRAL_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "claude": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "gpt": "OPENAI_API_KEY",
+    "o1": "OPENAI_API_KEY",
+    "gemini": "GOOGLE_API_KEY",
+    "vertex_ai": "GOOGLE_APPLICATION_CREDENTIALS",
+    "groq": "GROQ_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
     "together_ai": "TOGETHER_API_KEY",
-    "cohere":      "COHERE_API_KEY",
-    "ollama":      "",  # local
+    "cohere": "COHERE_API_KEY",
+    "ollama": "",  # local
     "ollama_chat": "",  # local
-    "lm_studio":   "",  # local
+    "lm_studio": "",  # local
 }
 
 
@@ -147,7 +147,7 @@ def _resolve_models(provider: str, model: str | None) -> dict[str, str]:
                 f"{model.split('-')[0].upper()}_API_KEY",  # best-effort fallback
             )
         return {
-            "analysis":   model,
+            "analysis": model,
             "generation": model,
             "evaluation": model,
             "api_key_env": api_key_env,
@@ -157,13 +157,17 @@ def _resolve_models(provider: str, model: str | None) -> dict[str, str]:
 
 # ── Agentic Readiness Scoring ──────────────────────────────────────────────
 
+
 def score(target_path: Path) -> dict[str, Any]:
     criteria: dict[str, tuple[int, bool]] = {
         "agent-context.json": (10, (target_path / "agent-context.json").exists()),
-        "CLAUDE.md":          (10, (target_path / "CLAUDE.md").exists()),
-        "AGENTS.md":          (10, (target_path / "AGENTS.md").exists()),
-        "system_prompt.md":   (5,  (target_path / "system_prompt.md").exists()),
-        "tools/ has files":   (10, any((target_path / "tools").glob("*")) if (target_path / "tools").exists() else False),
+        "CLAUDE.md": (10, (target_path / "CLAUDE.md").exists()),
+        "AGENTS.md": (10, (target_path / "AGENTS.md").exists()),
+        "system_prompt.md": (5, (target_path / "system_prompt.md").exists()),
+        "tools/ has files": (
+            10,
+            any((target_path / "tools").glob("*")) if (target_path / "tools").exists() else False,
+        ),
     }
 
     context_file = target_path / "agent-context.json"
@@ -173,28 +177,46 @@ def score(target_path: Path) -> dict[str, Any]:
             static = ctx.get("static", ctx)
             dynamic = ctx.get("dynamic", {})
             entry_point = static.get("entry_point", "")
-            criteria["entry_point exists"]      = (10, bool(entry_point) and (target_path / entry_point).exists())
-            criteria["test_command set"]         = (10, bool(static.get("test_command") or dynamic.get("test_command")))
-            criteria["restricted_write_paths"]   = (10, len(static.get("restricted_write_paths", [])) > 0)
-            criteria["environment_variables"]    = (10, len(static.get("environment_variables", [])) > 0)
-            criteria["domain_concepts >= 3"]     = (5,  len(static.get("domain_concepts", [])) >= 3)
+            criteria["entry_point exists"] = (
+                10,
+                bool(entry_point) and (target_path / entry_point).exists(),
+            )
+            criteria["test_command set"] = (
+                10,
+                bool(static.get("test_command") or dynamic.get("test_command")),
+            )
+            criteria["restricted_write_paths"] = (
+                10,
+                len(static.get("restricted_write_paths", [])) > 0,
+            )
+            criteria["environment_variables"] = (
+                10,
+                len(static.get("environment_variables", [])) > 0,
+            )
+            criteria["domain_concepts >= 3"] = (5, len(static.get("domain_concepts", [])) >= 3)
         except json.JSONDecodeError:
             pass
 
-    criteria["OpenAPI spec"] = (5, bool(
-        list(target_path.glob("**/openapi.yaml")) or
-        list(target_path.glob("**/openapi.yml")) or
-        list(target_path.glob("**/openapi.json")) or
-        list(target_path.glob("**/swagger.yaml")) or
-        list(target_path.glob("**/swagger.json"))
-    ))
-    criteria["CI config exists"] = (5, bool(
-        any(target_path.glob(".github/workflows/*.yml")) or
-        any(target_path.glob(".gitea/workflows/*.yml")) or
-        (target_path / ".travis.yml").exists() or
-        (target_path / ".circleci/config.yml").exists() or
-        (target_path / "Jenkinsfile").exists()
-    ))
+    criteria["OpenAPI spec"] = (
+        5,
+        bool(
+            list(target_path.glob("**/openapi.yaml"))
+            or list(target_path.glob("**/openapi.yml"))
+            or list(target_path.glob("**/openapi.json"))
+            or list(target_path.glob("**/swagger.yaml"))
+            or list(target_path.glob("**/swagger.json"))
+        ),
+    )
+    criteria["CI config exists"] = (
+        5,
+        bool(
+            any(target_path.glob(".github/workflows/*.yml"))
+            or any(target_path.glob(".gitea/workflows/*.yml"))
+            or (target_path / ".travis.yml").exists()
+            or (target_path / ".circleci/config.yml").exists()
+            or (target_path / "Jenkinsfile").exists()
+        ),
+    )
 
     total = 0
     table_rows = []
@@ -210,10 +232,11 @@ def score(target_path: Path) -> dict[str, Any]:
 
 # ── Pre-commit Hook Management ─────────────────────────────────────────────
 
+
 def install_hooks(target_path: Path) -> None:
     git_hooks_dir = target_path / ".git" / "hooks"
     hook_path = git_hooks_dir / "pre-commit"
-    hook_content = '''#!/bin/sh
+    hook_content = """#!/bin/sh
 # Installed by AgentReady (https://github.com/vb-nattamai/agent-ready)
 CHANGED=$(git diff --cached --name-only | grep -E '\\.(py|ts|js|java|go|rs|cs|rb)$')
 if [ -z "$CHANGED" ]; then exit 0; fi
@@ -227,7 +250,7 @@ python "$TOOLKIT/src/agent_ready/cli.py" --target . --only context --force --qui
 if ! git diff --quiet agent-context.json; then
   git add agent-context.json
 fi
-'''
+"""
     hook_path.parent.mkdir(parents=True, exist_ok=True)
     if hook_path.exists() and "agentic-ready" in hook_path.read_text():
         print(f"⚠️  Pre-commit hook already exists at {hook_path}.")
@@ -240,6 +263,7 @@ fi
 
 # ── Context Verification ───────────────────────────────────────────────────
 
+
 def verify(target_path: Path, provider: str = "anthropic") -> None:
     context_file = target_path / "agent-context.json"
     if not context_file.exists():
@@ -251,7 +275,9 @@ def verify(target_path: Path, provider: str = "anthropic") -> None:
         print("❌ agent-context.json is malformed JSON")
         return
 
-    claude_md = (target_path / "CLAUDE.md").read_text() if (target_path / "CLAUDE.md").exists() else ""
+    claude_md = (
+        (target_path / "CLAUDE.md").read_text() if (target_path / "CLAUDE.md").exists() else ""
+    )
 
     try:
         import litellm
@@ -282,9 +308,21 @@ CLAUDE.md:
 
     static = context_json.get("static", context_json)
     results = [
-        ("entry_point",      static.get("entry_point", "<unknown>"),      llm_answers.get("detected_entry_point", "<unknown>")),
-        ("test_command",     static.get("test_command", "<unknown>"),      llm_answers.get("detected_test_command", "<unknown>")),
-        ("primary_language", static.get("primary_language", "<unknown>"),  llm_answers.get("detected_primary_language", "<unknown>")),
+        (
+            "entry_point",
+            static.get("entry_point", "<unknown>"),
+            llm_answers.get("detected_entry_point", "<unknown>"),
+        ),
+        (
+            "test_command",
+            static.get("test_command", "<unknown>"),
+            llm_answers.get("detected_test_command", "<unknown>"),
+        ),
+        (
+            "primary_language",
+            static.get("primary_language", "<unknown>"),
+            llm_answers.get("detected_primary_language", "<unknown>"),
+        ),
     ]
 
     print()
@@ -293,7 +331,12 @@ CLAUDE.md:
     print("├─────────────────────┼──────────────────────┼──────────────────────┼────────┤")
     matched = 0
     for field, actual, understood in results:
-        match = "✅" if str(actual).lower() in str(understood).lower() or str(understood).lower() in str(actual).lower() else "❌"
+        match = (
+            "✅"
+            if str(actual).lower() in str(understood).lower()
+            or str(understood).lower() in str(actual).lower()
+            else "❌"
+        )
         if "✅" in match:
             matched += 1
         print(f"│ {field:<19} │ {str(actual)[:20]:<20} │ {str(understood)[:20]:<20} │ {match:<6} │")
@@ -304,6 +347,7 @@ CLAUDE.md:
 
 
 # ── LLM Pipeline ──────────────────────────────────────────────────────────
+
 
 def _run_llm_pipeline(
     target: Path,
@@ -357,6 +401,7 @@ def _run_llm_pipeline(
 
 # ── Eval Pipeline ──────────────────────────────────────────────────────────
 
+
 def _run_eval_pipeline(
     target: Path,
     models: dict[str, str],
@@ -387,7 +432,9 @@ def _run_eval_pipeline(
         if not quiet:
             print(f"\n  📄 Full report saved: {report_path.relative_to(target)}")
         if fail_level > 0 and not result["passed"]:
-            print(f"\n❌ Eval failed: pass rate {int(result['pass_rate'] * 100)}% is below threshold {int(fail_level * 100)}%")
+            print(
+                f"\n❌ Eval failed: pass rate {int(result['pass_rate'] * 100)}% is below threshold {int(fail_level * 100)}%"
+            )
             sys.exit(1)
         return result
     except ValueError as e:
@@ -396,6 +443,7 @@ def _run_eval_pipeline(
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -444,24 +492,30 @@ Or bypass presets entirely with any LiteLLM model string:
         ),
     )
     parser.add_argument(
-        "--only", choices=["agents", "tools", "context", "memory"],
+        "--only",
+        choices=["agents", "tools", "context", "memory"],
         help="Generate only a specific category",
     )
-    parser.add_argument("--dry-run",        action="store_true", help="Preview without writing files")
-    parser.add_argument("--force",          action="store_true", help="Overwrite existing files")
-    parser.add_argument("--quiet",          action="store_true", help="Suppress non-essential output")
-    parser.add_argument("--install-hooks",  action="store_true", help="Install pre-commit hook")
-    parser.add_argument("--verify",         action="store_true", help="Verify generated context with LLM")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without writing files")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing files")
+    parser.add_argument("--quiet", action="store_true", help="Suppress non-essential output")
+    parser.add_argument("--install-hooks", action="store_true", help="Install pre-commit hook")
+    parser.add_argument("--verify", action="store_true", help="Verify generated context with LLM")
     parser.add_argument(
-        "--eval", action="store_true",
+        "--eval",
+        action="store_true",
         help="After transformation, evaluate whether context files improve AI responses.",
     )
     parser.add_argument(
-        "--eval-only", action="store_true",
+        "--eval-only",
+        action="store_true",
         help="Skip transformation, run evaluation only against existing context files.",
     )
     parser.add_argument(
-        "--fail-level", type=float, default=0.0, metavar="0.0-1.0",
+        "--fail-level",
+        type=float,
+        default=0.0,
+        metavar="0.0-1.0",
         help="Exit 1 if eval pass rate is below this threshold. Use as CI gate.",
     )
 
@@ -491,7 +545,9 @@ Or bypass presets entirely with any LiteLLM model string:
             print("║   🧪 AgentReady Evaluator v2.0              ║")
             print("╚══════════════════════════════════════════════╝")
             print()
-        _run_eval_pipeline(target=target, models=models, fail_level=args.fail_level, quiet=args.quiet)
+        _run_eval_pipeline(
+            target=target, models=models, fail_level=args.fail_level, quiet=args.quiet
+        )
         return
 
     # ── Transformation ────────────────────────────────────────────────────
@@ -541,7 +597,9 @@ Or bypass presets entirely with any LiteLLM model string:
 
     # ── Optional eval after transformation ───────────────────────────────
     if args.eval and not args.dry_run:
-        _run_eval_pipeline(target=target, models=models, fail_level=args.fail_level, quiet=args.quiet)
+        _run_eval_pipeline(
+            target=target, models=models, fail_level=args.fail_level, quiet=args.quiet
+        )
 
 
 if __name__ == "__main__":

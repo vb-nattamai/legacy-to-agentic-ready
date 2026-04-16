@@ -23,6 +23,7 @@ from typing import Any
 
 # ── LiteLLM call with retry ───────────────────────────────────────────────────
 
+
 def _api_call_with_retry(
     model: str,
     messages: list[dict[str, str]],
@@ -46,11 +47,16 @@ def _api_call_with_retry(
             return response.choices[0].message.content.strip()
         except Exception as e:
             err_str = str(e).lower()
-            if any(x in err_str for x in ["529", "overloaded", "service unavailable", "rate limit", "429"]):
+            if any(
+                x in err_str
+                for x in ["529", "overloaded", "service unavailable", "rate limit", "429"]
+            ):
                 last_error = e
                 if attempt < max_retries - 1:
                     wait = (wait_base * (attempt + 1)) + random.uniform(0, 5)
-                    print(f"  ⚠️  API overloaded, retrying in {int(wait)}s... (attempt {attempt + 1}/{max_retries})")
+                    print(
+                        f"  ⚠️  API overloaded, retrying in {int(wait)}s... (attempt {attempt + 1}/{max_retries})"
+                    )
                     time.sleep(wait)
                 else:
                     raise last_error
@@ -291,7 +297,9 @@ def _build_report_lines(result: dict[str, Any]) -> list[str]:
     for category, scores in result["category_breakdown"].items():
         sign = "+" if scores["delta"] >= 0 else ""
         category_pass_pct = int(scores["pass_rate"] * 100)
-        status = "✅" if scores["pass_rate"] >= 0.7 else ("⚠️" if scores["pass_rate"] >= 0.5 else "❌")
+        status = (
+            "✅" if scores["pass_rate"] >= 0.7 else ("⚠️" if scores["pass_rate"] >= 0.5 else "❌")
+        )
         lines.append(
             f"| {status} {category} ({scores['question_count']}q) | {scores['baseline_avg']}/10 | **{scores['context_avg']}/10** | {sign}{scores['delta']} pts — {category_pass_pct}% pass |"
         )
@@ -308,7 +316,9 @@ def _build_report_lines(result: dict[str, Any]) -> list[str]:
         category_scores = result["category_breakdown"][category]
         category_pass_pct = int(category_scores["pass_rate"] * 100)
         category_status = (
-            "✅" if category_scores["pass_rate"] >= 0.7 else ("⚠️" if category_scores["pass_rate"] >= 0.5 else "❌")
+            "✅"
+            if category_scores["pass_rate"] >= 0.7
+            else ("⚠️" if category_scores["pass_rate"] >= 0.5 else "❌")
         )
         description = CATEGORY_DESCRIPTIONS.get(category, "")
 
@@ -323,9 +333,13 @@ def _build_report_lines(result: dict[str, Any]) -> list[str]:
 
         for result_row in category_results:
             status = "✅" if result_row["passed"] else "❌"
-            delta_str = f"+{result_row['delta']}" if result_row["delta"] >= 0 else str(result_row["delta"])
+            delta_str = (
+                f"+{result_row['delta']}" if result_row["delta"] >= 0 else str(result_row["delta"])
+            )
             missing = result_row["with_context"].get("key_missing", "")
-            hallucinated_flag = " 🔴 hallucinated" if result_row["with_context"]["hallucinated"] else ""
+            hallucinated_flag = (
+                " 🔴 hallucinated" if result_row["with_context"]["hallucinated"] else ""
+            )
             lines += [
                 f"#### {status} {result_row['question_id']} — {result_row['prompt']}",
                 "",
@@ -419,6 +433,7 @@ Rules:
 
 # ── Judge ─────────────────────────────────────────────────────────────────────
 
+
 def _judge_response(
     judge_model: str,
     question: dict[str, Any],
@@ -455,6 +470,7 @@ Return JSON:
 
 
 # ── Ask ───────────────────────────────────────────────────────────────────────
+
 
 def _ask(eval_model: str, prompt: str, system: str | None = None) -> str:
     messages = []
@@ -493,6 +509,7 @@ def _build_context_system(target: Path) -> str | None:
 
 # ── Main eval runner ──────────────────────────────────────────────────────────
 
+
 def run_eval(
     target: Path,
     eval_model: str,
@@ -525,7 +542,7 @@ def run_eval(
 
     for i, q in enumerate(questions):
         if not quiet:
-            print(f"  [{i+1}/{len(questions)}] {q['category']}: {q['prompt'][:60]}...")
+            print(f"  [{i + 1}/{len(questions)}] {q['category']}: {q['prompt'][:60]}...")
 
         time.sleep(1)
         baseline_response = _ask(eval_model, q["prompt"])
@@ -551,7 +568,9 @@ def run_eval(
             delta = result["delta"]
             delta_str = f"+{delta}" if delta >= 0 else str(delta)
             status = "✅" if result["passed"] else "❌"
-            print(f"     {status} baseline: {baseline_score}/10 → with context: {context_score}/10 ({delta_str})")
+            print(
+                f"     {status} baseline: {baseline_score}/10 → with context: {context_score}/10 ({delta_str})"
+            )
 
     eval_result = _build_eval_result(
         questions=questions,
@@ -567,6 +586,7 @@ def run_eval(
 
 # ── Terminal summary ──────────────────────────────────────────────────────────
 
+
 def _print_summary(result: dict[str, Any]) -> None:
     delta = result["score_delta"]
     sign = "+" if delta >= 0 else ""
@@ -579,7 +599,9 @@ def _print_summary(result: dict[str, Any]) -> None:
     print("──────────────────────────────────────────────")
     print(f"  Without context:  {result['baseline_score']}/10")
     print(f"  With context:     {result['context_score']}/10  ({sign}{delta} pts)")
-    print(f"  Pass rate:        {pass_pct}%  ({sum(1 for r in result['results'] if r['passed'])}/{result['question_count']} questions)")
+    print(
+        f"  Pass rate:        {pass_pct}%  ({sum(1 for r in result['results'] if r['passed'])}/{result['question_count']} questions)"
+    )
     print(f"  Hallucinations:   {halluc_pct}%")
     print()
     print("  Category results:")
@@ -587,7 +609,9 @@ def _print_summary(result: dict[str, Any]) -> None:
         bar = "█" * int(scores["context_avg"]) + "░" * (10 - int(scores["context_avg"]))
         sign = "+" if scores["delta"] >= 0 else ""
         pass_pct_cat = int(scores["pass_rate"] * 100)
-        print(f"    {cat:<14} [{bar}] {scores['context_avg']:>4}/10  {sign}{scores['delta']} pts  {pass_pct_cat}% pass")
+        print(
+            f"    {cat:<14} [{bar}] {scores['context_avg']:>4}/10  {sign}{scores['delta']} pts  {pass_pct_cat}% pass"
+        )
     print()
 
     if result["score_delta"] >= 5:
@@ -616,6 +640,7 @@ def _print_summary(result: dict[str, Any]) -> None:
 
 # ── Report generation ─────────────────────────────────────────────────────────
 
+
 def save_eval_report(target: Path, result: dict[str, Any]) -> Path:
     lines = _build_report_lines(result)
     report_path = target / "AGENTIC_EVAL.md"
@@ -625,4 +650,5 @@ def save_eval_report(target: Path, result: dict[str, Any]) -> Path:
 
 class EvalFailedError(Exception):
     """Raised when eval pass rate is below the required fail_level threshold."""
+
     pass
