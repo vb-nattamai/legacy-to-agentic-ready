@@ -1,0 +1,121 @@
+name: Agentic Ready Evaluator
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repo to evaluate (e.g. myorg/my-app)'
+        required: true
+        type: string
+      provider:
+        description: 'LLM provider preset: anthropic | openai | google | groq | mistral | together | ollama'
+        required: false
+        default: 'anthropic'
+        type: string
+      fail_level:
+        description: 'Fail if eval pass rate is below this threshold (0.0–1.0)'
+        required: false
+        default: '0.0'
+        type: string
+
+  workflow_call:
+    inputs:
+      target_repo:
+        description: 'Target repo to evaluate (e.g. myorg/my-app)'
+        required: true
+        type: string
+      provider:
+        description: 'LLM provider preset: anthropic | openai | google | groq | mistral | together | ollama'
+        required: false
+        default: 'anthropic'
+        type: string
+      fail_level:
+        description: 'Fail if eval pass rate is below this threshold (0.0–1.0)'
+        required: false
+        default: '0.0'
+        type: string
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ ! "${{ inputs.target_repo }}" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+            echo "❌ Invalid repo format. Use: owner/repo"
+            exit 1
+          fi
+          echo "✅ Target:   ${{ inputs.target_repo }}"
+          echo "   Provider: ${{ inputs.provider }}"
+          echo "   Fail level: ${{ inputs.fail_level }}"
+
+      - name: Checkout agent-ready (contains the evaluator)
+        uses: actions/checkout@v4
+        with:
+          repository: vb-nattamai/agent-ready
+          token: ${{ secrets.INSTALL_TOKEN || github.token }}
+          path: agent-ready
+
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.target_repo }}
+          token: ${{ secrets.INSTALL_TOKEN || github.token }}
+          path: target-repo
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install agent-ready with AI dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e './agent-ready[ai]' -q
+
+      - name: Run evaluation against target repo
+        id: eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}/agent-ready/src
+        run: |
+          CMD="python $GITHUB_WORKSPACE/agent-ready/src/agent_ready/cli.py"
+          CMD="$CMD --target ./target-repo"
+          CMD="$CMD --eval-only"
+          CMD="$CMD --provider ${{ inputs.provider }}"
+          [ "${{ inputs.fail_level }}" != "0.0" ] && CMD="$CMD --fail-level ${{ inputs.fail_level }}"
+
+          echo "Running: $CMD"
+          echo ""
+          $CMD
+
+          EVAL_FILE="./target-repo/AGENTIC_EVAL.md"
+          if [ -f "$EVAL_FILE" ]; then
+            echo "has_report=true" >> $GITHUB_OUTPUT
+            echo "report_path=$EVAL_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "has_report=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post eval report to step summary
+        if: steps.eval.outputs.has_report == 'true'
+        run: |
+          echo "## 📊 AgentReady Evaluation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat "${{ steps.eval.outputs.report_path }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload AGENTIC_EVAL.md as artifact
+        if: steps.eval.outputs.has_report == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-eval-report
+          path: ${{ steps.eval.outputs.report_path }}
+          retention-days: 30

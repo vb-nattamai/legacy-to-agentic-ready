@@ -84,6 +84,10 @@ jobs:
           cp ../toolkit/src/agent_ready/templates/pr-review-workflow.yml \
              .github/workflows/pr-review.yml
 
+          # Eval-only workflow (manual + push-triggered)
+          cp ../toolkit/src/agent_ready/templates/eval-workflow.yml \
+             .github/workflows/agentic-ready-eval.yml
+
           # Issue form template
           cp ../toolkit/src/agent_ready/templates/issue-template-agentic-ready.yml \
              .github/ISSUE_TEMPLATE/agentic-ready.yml
@@ -97,9 +101,10 @@ jobs:
             git add .github/workflows/agentic-ready.yml \
                     .github/workflows/context-drift-detector.yml \
                     .github/workflows/pr-review.yml \
+                    .github/workflows/agentic-ready-eval.yml \
                     .github/ISSUE_TEMPLATE/agentic-ready.yml
             if git ls-remote --heads origin "refs/heads/${TARGET_BRANCH}" | grep -q "${TARGET_BRANCH}"; then
-              git commit -m "feat: install AgentReady - trigger, drift detector, PR review, and issue template"
+              git commit -m "feat: install AgentReady - trigger, drift detector, PR review, eval, and issue template"
               git push origin "HEAD:${TARGET_BRANCH}"
               echo "✅ Files committed to ${TARGET_REPO}@${TARGET_BRANCH}"
             else
@@ -149,6 +154,7 @@ jobs:
           echo "   • .github/workflows/agentic-ready.yml          — issue trigger"
           echo "   • .github/workflows/context-drift-detector.yml — weekly drift detection"
           echo "   • .github/workflows/pr-review.yml              — AI-powered PR review"
+          echo "   • .github/workflows/agentic-ready-eval.yml     — eval-only (manual + push)"
           echo "   • .github/ISSUE_TEMPLATE/agentic-ready.yml     — pre-filled issue form"
           echo ""
           echo "   A transformation issue has been created automatically."
