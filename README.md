@@ -101,10 +101,11 @@ Run **"Install AgentReady to Target Repository"** from the [Actions tab](https:/
 - **provider**: `anthropic` (or `openai`, `google`, `groq`, `mistral`, `together`, `ollama`)
 - **eval**: ✅ enable eval after transformation (optional)
 
-This pushes four files into your repo:
-- `.github/workflows/agentic-ready.yml` — issue trigger
+This pushes **five files** into your repo:
+- `.github/workflows/agentic-ready.yml` — issue trigger (with eval enabled)
 - `.github/workflows/context-drift-detector.yml` — weekly drift detection
-- `.github/workflows/pr-review-workflow.yml` ← new
+- `.github/workflows/pr-review.yml` — AI-powered PR review
+- `.github/workflows/agentic-ready-eval.yml` — eval-only (manual + push-triggered)
 - `.github/ISSUE_TEMPLATE/agentic-ready.yml` — pre-filled issue form
 
 ### Step 2 — Add your secrets
@@ -278,6 +279,20 @@ First run typically scores **~85/100** — real content from real code analysis,
 
 ## Workflows
 
+### `reusable-eval.yml` — Standalone evaluator
+
+Runs evaluation only (no transformation) against any target repo. Called by the installed `agentic-ready-eval.yml` workflow and also dispatchable manually from the `agent-ready` Actions tab.
+
+**Inputs:**
+
+| Input | Default | Purpose |
+|---|---|---|
+| `target_repo` | required | Target repo in `owner/repo` format |
+| `provider` | `anthropic` | LLM provider |
+| `fail_level` | `0.0` | Exit 1 if pass rate below threshold |
+
+**Outputs:** Saves `AGENTIC_EVAL.md` to the step summary and uploads it as a workflow artifact (retained 30 days).
+
 ### `reusable-transformer.yml` — Core transformer
 
 The engine. Checks out the target repo, runs the LLM pipeline, optionally runs eval, opens a PR.
@@ -289,7 +304,7 @@ The engine. Checks out the target repo, runs the LLM pipeline, optionally runs e
 | `target_repo` | required | Target repo in `owner/repo` format |
 | `target_branch` | `main` | Branch the PR is opened against |
 | `provider` | `anthropic` | LLM provider: `anthropic`, `openai`, `google`, `groq`, `mistral`, `together`, `ollama` |
-| `eval` | `false` | Run eval after transformation |
+| `eval` | `true` | Run eval after transformation |
 | `fail_level` | `0.0` | Exit 1 if eval pass rate below threshold |
 | `only` | _(all)_ | Limit: `agents`, `tools`, `context`, `memory` |
 | `force` | `false` | Overwrite existing generated files |
@@ -328,6 +343,14 @@ Installs into target repos. Runs on every pull request and posts an **APPROVE** 
 **Security note:** Uses `pull_request_target` — the review script always runs from the base branch, keeping secrets inaccessible to PR authors.
 
 **Privacy note:** PR diffs and descriptions are sent to an external LLM API (Anthropic by default). Do not use this workflow if your diffs may contain secrets or confidential material not suitable for third-party processing.
+
+### `eval-workflow.yml` — Eval-only for target repos
+
+Installed as `.github/workflows/agentic-ready-eval.yml` in every target repo. Triggers:
+- **Manual** — `workflow_dispatch` from the Actions tab (with optional `fail_level`)
+- **Automatic** — on every `push` to `main` when scaffolding files (`AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`) or `src/` change
+
+This lets you track scaffolding quality over time independently of the full transformation. Results appear in the workflow step summary and as a downloadable `AGENTIC_EVAL.md` artifact.
 
 ### `validate-token-permissions.yml` — Token validation
 

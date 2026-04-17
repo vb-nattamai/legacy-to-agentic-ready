@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] — 2026-04-17
+
+### Added
+
+- `reusable-eval.yml` — new reusable workflow that runs eval-only against any target repo; posts `AGENTIC_EVAL.md` to the step summary and uploads it as a 30-day artifact
+- `eval-workflow.yml` template — installed into target repos as `.github/workflows/agentic-ready-eval.yml`; triggers on `workflow_dispatch` and on `push` to `main` when scaffolding files change
+
+### Changed
+
+- `install-workflow.yml` template — `eval` now defaults to `true`; transformation runs include evaluation by default
+- `install-to-target-repo.yml` — installer now also pushes `agentic-ready-eval.yml` into target repos (5 files total)
+
 ## [2.5.1] — 2026-04-16
 
 ### Added
