@@ -30,13 +30,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout agent-ready
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: toolkit
 
       - name: Checkout target repo
         if: ${{ github.event.inputs.target_repo != '.' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.event.inputs.target_repo }}
           path: target

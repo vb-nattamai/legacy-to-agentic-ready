@@ -110,14 +110,14 @@ jobs:
           echo "   Force:    ${{ inputs.force }}"
 
       - name: Checkout agent-ready (this repo — contains the transformer)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: vb-nattamai/agent-ready
           token: ${{ secrets.INSTALL_TOKEN || github.token }}
           path: agent-ready
 
       - name: Checkout target repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.target_repo }}
           token: ${{ secrets.INSTALL_TOKEN || github.token }}

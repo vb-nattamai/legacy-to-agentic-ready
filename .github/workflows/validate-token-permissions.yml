@@ -24,7 +24,7 @@ jobs:
           echo "✅ INSTALL_TOKEN is set"
 
       - name: Checkout target repo using INSTALL_TOKEN
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.target_repo }}
           token: ${{ secrets.INSTALL_TOKEN }}

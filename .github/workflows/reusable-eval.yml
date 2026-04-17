@@ -53,14 +53,14 @@ jobs:
           echo "   Fail level: ${{ inputs.fail_level }}"
 
       - name: Checkout agent-ready (contains the evaluator)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: vb-nattamai/agent-ready
           token: ${{ secrets.INSTALL_TOKEN || github.token }}
           path: agent-ready
 
       - name: Checkout target repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.target_repo }}
           token: ${{ secrets.INSTALL_TOKEN || github.token }}

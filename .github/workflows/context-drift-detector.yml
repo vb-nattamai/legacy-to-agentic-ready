@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout agent-ready transformer
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: vb-nattamai/agent-ready
           token: ${{ secrets.INSTALL_TOKEN || github.token }}

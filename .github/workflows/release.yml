@@ -18,7 +18,7 @@ jobs:
       created: ${{ steps.create_release.outputs.created }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
