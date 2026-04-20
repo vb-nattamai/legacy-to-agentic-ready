@@ -272,7 +272,7 @@ def test_post_review_uses_request_changes_flag(tmp_path):
 
 def test_post_review_subprocess_uses_list_not_shell(tmp_path):
     """Ensure no shell=True — guards against command injection."""
-    from unittest.mock import MagicMock, call, patch
+    from unittest.mock import MagicMock, patch
 
     with patch("subprocess.run", return_value=MagicMock()) as mock_run:
         reviewer.post_review(1, "APPROVE", "ok", tmp_path)
