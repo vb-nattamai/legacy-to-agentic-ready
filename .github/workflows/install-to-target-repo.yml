@@ -36,12 +36,13 @@ jobs:
           PROVIDER: ${{ inputs.provider }}
           EVAL_MODE: ${{ inputs.eval }}
           TARGET_BRANCH: ${{ inputs.target_branch }}
+          INSTALL_TOKEN_SET: ${{ secrets.INSTALL_TOKEN != '' && 'true' || 'false' }}
         run: |
           if [[ ! "$TARGET_REPO" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
             echo "❌ Invalid repo format. Use: owner/repo"
             exit 1
           fi
-          if [ -z "${{ secrets.INSTALL_TOKEN }}" ]; then
+          if [ "$INSTALL_TOKEN_SET" != "true" ]; then
             echo "⚠️  INSTALL_TOKEN not set — falling back to github.token"
             echo "   This will fail for repos outside this org."
           fi

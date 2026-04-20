@@ -213,3 +213,148 @@ def test_build_report_lines_includes_improvement_section_on_failures() -> None:
     assert "## What to Improve" in report
     assert "[pitfalls]" in report
     assert "Missing: exact scopes" in report
+
+
+# ── Multi-agent judge panel tests ─────────────────────────────────────────────
+
+
+def _make_judge_result(
+    name: str, correct: bool, score: int, hallucinated: bool = False, key_missing: str = ""
+) -> dict:
+    return {
+        "name": name,
+        "correct": correct,
+        "score": score,
+        "hallucinated": hallucinated,
+        "key_missing": key_missing,
+    }
+
+
+def test_panel_vote_unanimous_pass() -> None:
+    results = [
+        _make_judge_result("factual", True, 9),
+        _make_judge_result("semantic", True, 8),
+        _make_judge_result("safety", True, 8),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert verdict["correct"] is True
+    assert verdict["panel_vote"] == "3/3"
+    assert verdict["hallucinated"] is False
+    assert verdict["score"] == 8.3
+
+
+def test_panel_vote_unanimous_fail() -> None:
+    results = [
+        _make_judge_result("factual", False, 3),
+        _make_judge_result("semantic", False, 4),
+        _make_judge_result("safety", False, 2),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert verdict["correct"] is False
+    assert verdict["panel_vote"] == "0/3"
+
+
+def test_panel_vote_majority_pass_two_out_of_three() -> None:
+    results = [
+        _make_judge_result("factual", True, 8),
+        _make_judge_result("semantic", True, 7),
+        _make_judge_result("safety", False, 4),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert verdict["correct"] is True
+    assert verdict["panel_vote"] == "2/3"
+
+
+def test_panel_vote_majority_fail_one_out_of_three() -> None:
+    results = [
+        _make_judge_result("factual", True, 8),
+        _make_judge_result("semantic", False, 5),
+        _make_judge_result("safety", False, 3),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert verdict["correct"] is False
+    assert verdict["panel_vote"] == "1/3"
+
+
+def test_panel_vote_hallucination_any_judge_flags() -> None:
+    """Conservative: any judge flagging hallucination sets the flag."""
+    results = [
+        _make_judge_result("factual", True, 9, hallucinated=False),
+        _make_judge_result("semantic", True, 8, hallucinated=True),
+        _make_judge_result("safety", True, 7, hallucinated=False),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert verdict["hallucinated"] is True
+    assert verdict["correct"] is True  # still passes on votes
+
+
+def test_panel_vote_key_missing_from_first_failing_judge() -> None:
+    results = [
+        _make_judge_result("factual", False, 4, key_missing="wrong flag"),
+        _make_judge_result("semantic", True, 7, key_missing=""),
+        _make_judge_result("safety", False, 3, key_missing="broken path"),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert verdict["key_missing"] == "wrong flag"
+
+
+def test_panel_vote_reasoning_contains_vote_summary() -> None:
+    results = [
+        _make_judge_result("factual", True, 9),
+        _make_judge_result("semantic", False, 4),
+        _make_judge_result("safety", True, 8),
+    ]
+    verdict = evaluator._panel_vote(results)
+    assert "2/3" in verdict["reasoning"]
+    assert "factual=✓" in verdict["reasoning"]
+    assert "semantic=✗" in verdict["reasoning"]
+
+
+def test_panel_vote_empty_list_does_not_crash() -> None:
+    """Edge case: empty list should not divide by zero."""
+    verdict = evaluator._panel_vote([])
+    assert verdict["correct"] is False
+    assert verdict["score"] == 0.0
+
+
+def test_multi_judge_response_uses_three_judges(monkeypatch) -> None:
+    """Verify _multi_judge_response calls the judge for each panel member."""
+    call_count = {"n": 0}
+
+    def fake_api_call(model, messages, max_tokens):
+        call_count["n"] += 1
+        return '{"score": 8, "correct": true, "reasoning": "good", "hallucinated": false, "key_missing": ""}'
+
+    monkeypatch.setattr(evaluator, "_api_call_with_retry", fake_api_call)
+
+    question = _sample_question()
+    result = evaluator._multi_judge_response("anthropic/claude-3-haiku", question, "pytest -q")
+
+    assert call_count["n"] == 3  # one per judge panel
+    assert result["panel_vote"] == "3/3"
+    assert result["correct"] is True
+
+
+def test_multi_judge_response_result_sorted_by_panel_order(monkeypatch) -> None:
+    """Results must be sorted to match JUDGE_PANELS order regardless of completion order."""
+    panel_names = [p["name"] for p in evaluator.JUDGE_PANELS]
+
+    def fake_api_call(model, messages, max_tokens):
+        return '{"score": 7, "correct": true, "reasoning": "ok", "hallucinated": false, "key_missing": ""}'
+
+    monkeypatch.setattr(evaluator, "_api_call_with_retry", fake_api_call)
+
+    result = evaluator._multi_judge_response(
+        "anthropic/claude-3-haiku", _sample_question(), "pytest -q"
+    )
+    returned_names = [p["name"] for p in result["panel"]]
+    assert returned_names == panel_names
+
+
+def test_judge_panels_constant_has_three_entries() -> None:
+    assert len(evaluator.JUDGE_PANELS) == 3
+    for panel in evaluator.JUDGE_PANELS:
+        assert "name" in panel
+        assert "label" in panel
+        assert "icon" in panel
+        assert "system" in panel

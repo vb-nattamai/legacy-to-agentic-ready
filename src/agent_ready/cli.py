@@ -408,9 +408,9 @@ def _run_eval_pipeline(
     fail_level: float = 0.0,
     quiet: bool = False,
 ) -> dict[str, Any]:
-    api_key_env = models["api_key_env"]
-    if api_key_env and not os.environ.get(api_key_env):
-        print(f"❌ {api_key_env} environment variable is not set.")
+    env_var_name = models["api_key_env"]
+    if env_var_name and not os.environ.get(env_var_name):
+        print(f"❌ {env_var_name} environment variable is not set.")
         sys.exit(1)
 
     try:
