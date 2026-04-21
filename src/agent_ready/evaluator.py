@@ -462,7 +462,7 @@ def _build_report_lines(result: dict[str, Any]) -> list[str]:
             "✅" if scores["pass_rate"] >= 0.7 else ("⚠️" if scores["pass_rate"] >= 0.5 else "❌")
         )
         lines.append(
-            f"| {status} {category} ({scores['question_count']}q) | {scores['baseline_avg']}/10 | **{scores['context_avg']}/10** | {sign}{scores['delta']} pts — {category_pass_pct}% pass |"
+            f"| {status} {category} ({scores['question_count']}q) | {scores['baseline_avg']}/10 | **{scores['context_avg']}/10** | {sign}{scores['delta']:.1f} pts — {category_pass_pct}% pass |"
         )
 
     lines += [
@@ -488,14 +488,14 @@ def _build_report_lines(result: dict[str, Any]) -> list[str]:
             "",
             f"_{description}_",
             "",
-            f"**Score:** {category_scores['baseline_avg']}/10 → **{category_scores['context_avg']}/10** &nbsp; ({'+' if category_scores['delta'] >= 0 else ''}{category_scores['delta']} pts) &nbsp; **{category_pass_pct}% pass rate**",
+            f"**Score:** {category_scores['baseline_avg']}/10 → **{category_scores['context_avg']}/10** &nbsp; ({'+' if category_scores['delta'] >= 0 else ''}{category_scores['delta']:.1f} pts) &nbsp; **{category_pass_pct}% pass rate**",
             "",
         ]
 
         for result_row in category_results:
             status = "✅" if result_row["passed"] else "❌"
             delta_str = (
-                f"+{result_row['delta']}" if result_row["delta"] >= 0 else str(result_row["delta"])
+                f"+{result_row['delta']:.1f}" if result_row["delta"] >= 0 else f"{result_row['delta']:.1f}"
             )
             missing = result_row["with_context"].get("key_missing", "")
             hallucinated_flag = (
@@ -895,7 +895,7 @@ def _print_summary(result: dict[str, Any]) -> None:
         sign = "+" if scores["delta"] >= 0 else ""
         pass_pct_cat = int(scores["pass_rate"] * 100)
         print(
-            f"    {cat:<14} [{bar}] {scores['context_avg']:>4}/10  {sign}{scores['delta']} pts  {pass_pct_cat}% pass"
+            f"    {cat:<14} [{bar}] {scores['context_avg']:>4}/10  {sign}{scores['delta']:.1f} pts  {pass_pct_cat}% pass"
         )
     print()
 
