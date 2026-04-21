@@ -9,21 +9,16 @@ This PR was generated automatically by [AgentReady](https://github.com/vb-nattam
 | `CLAUDE.md` | Persistent context for Claude Code — read at every session start |
 | `AGENTS.md` | Agent contract: safe ops, forbidden ops, domain glossary |
 | `agent-context.json` | Machine-readable repo map for all platforms |
-| `agents/system_prompt.md` | Universal system prompt — works with any LLM |
-| `agents/openai_agent.py` | OpenAI Agents SDK entry point |
-| `agents/gemini_agent.yaml` | Google ADK no-code config |
-| `agents/gemini_agent.py` | Google ADK Python agent |
+| `system_prompt.md` | Universal system prompt — works with any LLM |
 | `mcp.json` | MCP server configuration for Claude Code and VS Code |
-| `tools/` | Tool scaffolds matching detected language(s) |
-| `memory/schema.md` | Memory and state contract |
-| `AGENTIC_READINESS.md` | Audit report and next steps |
+| `memory/schema.md` | Agent working memory and state contract |
+| `AGENTIC_EVAL.md` | Eval report — baseline vs. context scores (if eval was enabled) |
 
 ### Before merging
 
 - [ ] Review `agent-context.json` — verify `domain_concepts`, `restricted_write_paths`, and `environment_variables` are accurate
 - [ ] Review `AGENTS.md` — verify the domain glossary reflects real terms from your codebase
 - [ ] Review `CLAUDE.md` — verify the module layout matches your actual directory structure
-- [ ] Replace any remaining `{{PLACEHOLDER}}` values in generated files
 - [ ] Run your test suite to confirm no existing files were modified
 
 ### How to use after merging
@@ -31,18 +26,17 @@ This PR was generated automatically by [AgentReady](https://github.com/vb-nattam
 **Claude Code:**
 ```bash
 claude "Help me add a new feature to this repo"
-# Claude reads CLAUDE.md automatically
+# CLAUDE.md is read automatically at every session start
 ```
 
-**OpenAI Agents SDK:**
+**GitHub Copilot / any agent:**
 ```bash
-python agents/openai_agent.py
+# Paste system_prompt.md as the system parameter in any LLM API call
+# or reference AGENTS.md as context in your agent framework
 ```
 
-**Google ADK:**
-```bash
-adk run agents/gemini_agent.yaml
+**MCP clients (Claude Code, VS Code):**
+```json
+// mcp.json is ready to load — configure your MCP host to point at it
 ```
 
-**Any LLM:**
-Use `agents/system_prompt.md` as the `system` parameter in any API call.

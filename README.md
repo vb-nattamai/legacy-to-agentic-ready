@@ -1,6 +1,8 @@
 # AgentReady
 
 [![Version](https://img.shields.io/github/v/release/vb-nattamai/agent-ready)](https://github.com/vb-nattamai/agent-ready/releases)
+[![CI](https://github.com/vb-nattamai/agent-ready/actions/workflows/ci.yml/badge.svg)](https://github.com/vb-nattamai/agent-ready/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/vb-nattamai/agent-ready/actions/workflows/codeql.yml/badge.svg)](https://github.com/vb-nattamai/agent-ready/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/github/license/vb-nattamai/agent-ready)](LICENSE)
 
 Transform any legacy repository into an AI-agent-ready codebase — with real content written from your actual code, not template placeholders.
@@ -11,18 +13,16 @@ Transform any legacy repository into an AI-agent-ready codebase — with real co
 
 AI agents fail on unfamiliar codebases because they lack context — they invent file paths, guess commands, and miss domain concepts entirely. AgentReady fixes this by generating scaffolding files that give agents real, verified knowledge of your repository before they touch a single line of code.
 
-**Proven results across four real codebases:**
+**Cross-stack results from the latest sanity run (4 repos, fresh codebases):**
 
-| Repo | Stack | Files | Without context | With context | Pass rate |
-|------|-------|-------|----------------|--------------|-----------|
-| Simple bowling kata | Java, single class | 13 | 0.8 / 10 | 9.7 / 10 | 100% |
-| [travel-assist](https://github.com/vb-nattamai/travel-assist) | Kotlin, Spring Boot | 23 | 0.3 / 10 | 8.9 / 10 | 89% |
-| [bowling-kata](https://github.com/vb-nattamai/bowling-kata) | Java, Python, Go, TypeScript | 47 | 2.1 / 10 | 7.6 / 10 | 89% |
-| [food-delivery](https://github.com/vb-nattamai/food-delivery) | Java, Kotlin, Python, Go, TypeScript, React | 81 | 1.4 / 10 | 8.5 / 10 | 87% |
+| Repo | Stack | Score (with context) | Pass rate |
+|------|-------|---------------------|-----------|
+| [ar-test-python-simple](https://github.com/vb-nattamai/ar-test-python-simple) | Python, Flask | 9.7 / 10 | 100% |
+| [ar-test-node-express](https://github.com/vb-nattamai/ar-test-node-express) | Node.js, Express, Jest | 9.4 / 10 | 100% |
+| [ar-test-python-complex](https://github.com/vb-nattamai/ar-test-python-complex) | Python, multi-module, CI | 9.4 / 10 | 100% |
+| [ar-test-empty](https://github.com/vb-nattamai/ar-test-empty) | Near-empty repo (edge case) | 8.9 / 10 | 93% |
 
-*Scores are averages across 15 repo-specific questions across 5 categories, judged by Claude Haiku. Without context, an AI agent is essentially guessing — it cannot know your file paths, commands, or domain logic.*
-
-The pattern is consistent: context files dramatically improve AI agent responses regardless of repo complexity. More complex polyglot repos score slightly lower due to the inherent difficulty of reasoning across multiple languages and build systems.
+*Scores are averages across 15 repo-specific questions across 5 categories, judged by a three-judge panel (Factual Accuracy, Semantic Equivalence, Operational Safety). The empty repo test validates graceful fallback — no invented stack or hallucinated paths.*
 
 ---
 
@@ -74,18 +74,14 @@ agent-ready --target /path/to/your/repo
 export OPENAI_API_KEY="sk-..."
 agent-ready --target /path/to/your/repo --provider openai
 
-export GROQ_API_KEY="gsk_..."
-agent-ready --target /path/to/your/repo --provider groq
-
-# Or pass any LiteLLM model string directly
-agent-ready --target /path/to/your/repo --model ollama/llama3.3   # local, free
-
 # Transform + measure improvement in one shot
 agent-ready --target /path/to/your/repo --eval
 
 # Preview without writing any files
 agent-ready --target /path/to/your/repo --dry-run
 ```
+
+See [CLI Reference](#cli-reference) for all flags.
 
 ---
 
@@ -119,10 +115,7 @@ ANTHROPIC_API_KEY = sk-ant-...   # set the key for your chosen provider
 INSTALL_TOKEN     = ghp_...       # PAT with repo + workflow scopes
 ```
 
-Trust boundary:
-- only collaborators with `admin`, `maintain`, or `write` can trigger a run
-- the workflow can push branches and open PRs in the target repo
-- use a repo-scoped token where possible and rotate it regularly
+> **Trust boundary:** Only collaborators with `admin`, `maintain`, or `write` access can trigger a run. The workflow can push branches and open PRs in the target repo — use a repo-scoped token where possible and rotate it regularly.
 
 ### Step 3 — Open an issue
 
@@ -265,6 +258,7 @@ agent-ready --target /path/to/repo --model ollama/llama3.3   # local, free
 
 # Selective generation
 agent-ready --target /path/to/repo --only agents
+agent-ready --target /path/to/repo --only tools
 agent-ready --target /path/to/repo --only context
 agent-ready --target /path/to/repo --only memory
 
@@ -403,7 +397,7 @@ Installs into target repos. Runs on every pull request and posts an **APPROVE** 
 
 **Privacy note:** PR diffs and descriptions are sent to an external LLM API (Anthropic by default). Do not use this workflow if your diffs may contain secrets or confidential material not suitable for third-party processing.
 
-### `eval-workflow.yml` — Eval-only for target repos
+### `agentic-ready-eval.yml` — Eval-only for target repos (installed template)
 
 Installed as `.github/workflows/agentic-ready-eval.yml` in every target repo. Triggers:
 - **Manual** — `workflow_dispatch` from the Actions tab (with optional `fail_level`)
@@ -529,23 +523,15 @@ Contributions are very welcome. AgentReady is an early-stage open-source project
 1. Fork this repository
 2. Create a feature branch: `git checkout -b feat/my-improvement`
 3. Commit with conventional commits: `feat:`, `fix:`, `docs:`
-4. Run the full pre-push checklist before opening a PR:
-
-```bash
-git pull --rebase \
-  && ruff format src tests \
-  && ruff check src tests \
-  && python -m pytest tests/ -q --cov=src/agent_ready --cov-fail-under=50 \
-  && git push
-```
-
-**CI gates (all must pass):**
-- `ruff format --check` — formatting
-- `ruff check` — linting
-- `pytest --cov-fail-under=50` — all tests pass, coverage ≥ 50%
-- CodeQL — no new security findings
-
-5. Push and open a Pull Request
+4. Run the full pre-push checklist:
+   ```bash
+   git pull --rebase \
+     && ruff format src tests \
+     && ruff check src tests \
+     && python -m pytest tests/ -q --cov=src/agent_ready --cov-fail-under=50 \
+     && git push
+   ```
+5. Open a Pull Request — all CI gates must pass: format check, lint, coverage ≥ 50%, CodeQL clean
 
 Please open an issue first for significant changes so we can discuss the approach before you invest time building it.
 

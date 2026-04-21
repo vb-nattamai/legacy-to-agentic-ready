@@ -1,0 +1,157 @@
+{
+  "static": {
+    "project_name": "agent-ready",
+    "description": "Transform any legacy repository into an AI-agent-ready codebase by generating scaffolding files (AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, memory/schema.md) using LLM-first analysis of actual code.",
+    "primary_language": "Python",
+    "frameworks": [
+      "litellm",
+      "pytest",
+      "setuptools",
+      "ruff"
+    ],
+    "entry_point": "src/agent_ready/cli.py",
+    "test_command": "pytest -q --cov=src/agent_ready --cov-report=term-missing --cov-fail-under=50",
+    "restricted_write_paths": [
+      "LICENSE",
+      "VERSION",
+      ".github/workflows/ci.yml",
+      ".github/workflows/release.yml",
+      ".github/workflows/codeql.yml"
+    ],
+    "environment_variables": [
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "GOOGLE_API_KEY",
+      "GROQ_API_KEY",
+      "MISTRAL_API_KEY",
+      "TOGETHER_API_KEY",
+      "INSTALL_TOKEN",
+      "GH_TOKEN",
+      "PR_NUMBER",
+      "PYTHONPATH"
+    ],
+    "domain_concepts": [
+      "agent-context.json: Machine-readable JSON file containing both static (user-editable) and dynamic (LLM-generated) metadata about a repository, used to ground AI agents",
+      "scaffolding files: The set of generated files (AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, memory/schema.md) that give AI agents verified knowledge of a repository",
+      "context drift: When the generated scaffolding files become stale relative to actual code changes, detected weekly by a drift detection workflow",
+      "readiness score: A 100-point score measuring how well-prepared a codebase is for AI agent interaction",
+      "provider preset: A named configuration mapping three pipeline phases (analysis, generation, evaluation) to specific LLM model strings",
+      "Phase 1 \u2014 Collect: Mechanical file reading phase that gathers file tree, source files, config files, CI config, and README without any LLM reasoning",
+      "Phase 2 \u2014 Analyse: LLM-powered phase that reads collected code and produces structured JSON understanding of the repository",
+      "Phase 3 \u2014 Generate: LLM-powered phase that writes each output scaffolding file from scratch based on the analysis JSON",
+      "Phase 5 \u2014 Evaluate: Assessment phase that generates 15 questions across 5 categories and measures whether context files improve AI responses",
+      "restricted_write_paths: Paths that AI agents must never modify, identified during analysis and recorded in agent-context.json",
+      "MCP tool templates: Language-specific scaffold files (Python, Java, TypeScript, Go) for creating MCP-compatible tools"
+    ]
+  },
+  "dynamic": {
+    "last_scanned": "2026-04-21T07:32:02.379985+00:00",
+    "secondary_languages": [],
+    "build_system": "pip",
+    "build_command": "pip install -e '.[dev]'",
+    "install_command": "pip install \"git+https://github.com/vb-nattamai/agent-ready.git[ai]\"",
+    "run_command": "agent-ready --target /path/to/repo",
+    "test_framework": "pytest",
+    "test_directory": "tests",
+    "source_directories": [
+      "src/agent_ready"
+    ],
+    "module_layout": {
+      "agent_ready": "src/agent_ready",
+      "agent_ready.cli": "src/agent_ready/cli.py",
+      "agent_ready.analyser": "src/agent_ready/analyser.py",
+      "agent_ready.generator": "src/agent_ready/generator.py",
+      "agent_ready.evaluator": "src/agent_ready/evaluator.py",
+      "agent_ready.reviewer": "src/agent_ready/reviewer.py",
+      "agent_ready.templates": "src/agent_ready/templates"
+    },
+    "architecture_summary": "AgentReady follows a 5-phase pipeline: Phase 1 (Collect) reads file tree and source files mechanically, Phase 2 (Analyse) sends collected code to an LLM for structured JSON analysis, Phase 3 (Generate) uses an LLM to write scaffolding files, Phase 4 (Score) computes a readiness score, and Phase 5 (Evaluate) measures improvement via 15 questions. The system is provider-agnostic via LiteLLM, supporting Anthropic, OpenAI, Google, Groq, Mistral, Together, and Ollama with tiered model selection per phase (strongest for analysis, fastest for evaluation).",
+    "key_components": [
+      {
+        "name": "CLI",
+        "path": "src/agent_ready/cli.py",
+        "responsibility": "Main entry point and argument parser; orchestrates the 5-phase pipeline, manages provider selection, and handles dry-run/eval-only/review modes"
+      },
+      {
+        "name": "Analyser",
+        "path": "src/agent_ready/analyser.py",
+        "responsibility": "Phase 1 (Collect) and Phase 2 (Analyse) \u2014 reads repository files mechanically, then sends them to an LLM to produce structured analysis JSON"
+      },
+      {
+        "name": "Generator",
+        "path": "src/agent_ready/generator.py",
+        "responsibility": "Phase 3 (Generate) \u2014 takes analysis JSON and uses an LLM to write AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, and memory/schema.md"
+      },
+      {
+        "name": "Evaluator",
+        "path": "src/agent_ready/evaluator.py",
+        "responsibility": "Phase 5 (Evaluate) \u2014 generates 15 questions across 5 categories (commands, safety, domain, architecture, pitfalls) and measures AI response quality with and without context"
+      },
+      {
+        "name": "Reviewer",
+        "path": "src/agent_ready/reviewer.py",
+        "responsibility": "PR review module \u2014 reviews pull requests using LLM reasoning grounded in agent-context.json, posts structured review comments via GitHub API"
+      },
+      {
+        "name": "Tool Templates",
+        "path": "src/agent_ready/templates",
+        "responsibility": "Language-specific MCP-compatible tool scaffolds for Python, Java, TypeScript, and Go"
+      },
+      {
+        "name": "Install Workflow",
+        "path": ".github/workflows/install-to-target-repo.yml",
+        "responsibility": "GitHub Actions workflow that pushes trigger workflows and issue templates into a target repository"
+      },
+      {
+        "name": "Reusable Transformer",
+        "path": ".github/workflows/reusable-transformer.yml",
+        "responsibility": "Reusable GitHub Actions workflow that runs the full transformation pipeline on a target repo and opens a PR with generated files"
+      },
+      {
+        "name": "Drift Detector",
+        "path": ".github/workflows/context-drift-detector.yml",
+        "responsibility": "Weekly scheduled workflow that detects meaningful drift between generated context files and actual codebase state"
+      }
+    ],
+    "agent_safe_operations": [
+      "Running pytest tests with coverage",
+      "Running ruff check for linting",
+      "Running ruff format --check for format verification",
+      "Running agent-ready with --dry-run flag to preview without writing files",
+      "Running agent-ready with --eval-only to evaluate existing context files",
+      "Reading any file under src/agent_ready/ for understanding",
+      "Reading test files under tests/",
+      "Modifying test files under tests/",
+      "Adding new source files under src/agent_ready/",
+      "Modifying CHANGELOG.md or CONTRIBUTING.md"
+    ],
+    "agent_forbidden_operations": [
+      "Modifying .github/workflows/ CI files without explicit approval",
+      "Committing API keys or secrets to any file",
+      "Modifying the VERSION file directly (managed by release workflow)",
+      "Removing or modifying LICENSE",
+      "Running shell commands with shell=True in subprocess calls (security boundary)",
+      "Editing files in src/agent_ready/templates/ without understanding template placeholder syntax",
+      "Modifying pyproject.toml version configuration (version is read from __init__.py via setuptools dynamic)",
+      "Pushing directly to main branch (all changes go through PRs)"
+    ],
+    "potential_pitfalls": [
+      "Zero hard dependencies \u2014 core package uses only stdlib; LLM features require installing with [ai] extra (pip install agent-ready[ai]) or litellm will ImportError",
+      "Version is managed dynamically via setuptools reading __version__ from src/agent_ready/__init__.py AND a separate VERSION file \u2014 both must stay in sync (release workflow handles this)",
+      "The analyser skips AgentReady-generated files (AGENTS.md, CLAUDE.md, agent-context.json, etc.) via SKIP_AGENT_FILES set \u2014 feeding them back would create circular analysis",
+      "Template files use double-brace placeholders like {{TOOL_NAME}} that look like Jinja2 but are NOT \u2014 they are simple string replacements; do not add Jinja2 logic",
+      "LLM API calls include retry logic with exponential backoff for 429/529/overloaded errors \u2014 tests mocking LLM calls must account for the retry wrapper",
+      "The ruff exclude configuration explicitly skips src/agent_ready/templates \u2014 template files intentionally contain placeholder syntax that would fail linting",
+      "PR reviewer treats all PR diff content as untrusted \u2014 it is sent to LLM APIs but never executed locally; subprocess calls use argument lists (no shell=True)",
+      "The CI workflow enforces minimum 50% code coverage (--cov-fail-under=50) \u2014 new code must maintain this threshold",
+      "Provider presets map three different models per provider (analysis/generation/evaluation) \u2014 using --model overrides ALL three phases with the same model",
+      "GitHub Actions workflows use secrets: inherit pattern \u2014 INSTALL_TOKEN and provider API keys must be set in the target repo's secrets, not just agent-ready's secrets"
+    ],
+    "conventions": {
+      "naming": "snake_case",
+      "structure": "single-package"
+    },
+    "has_ci": true,
+    "has_openapi": false
+  }
+}
