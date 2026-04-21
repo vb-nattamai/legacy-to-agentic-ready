@@ -23,11 +23,12 @@ classifiers = [
 dependencies = []  # zero hard deps — pure stdlib
 
 [project.optional-dependencies]
-ai  = ["litellm>=1.35.0"]
+ai  = ["litellm>=1.35.0", "mcp>=1.0.0"]
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.4"]
 
 [project.scripts]
-agent-ready = "agent_ready.cli:main"
+agent-ready     = "agent_ready.cli:main"
+agent-ready-mcp = "agent_ready.mcp_server:main"
 
 [project.urls]
 Homepage   = "https://github.com/vb-nattamai/agent-ready"
