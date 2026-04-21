@@ -60,21 +60,23 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          INPUT_TARGET_REPO: ${{ github.event.inputs.target_repo }}
+          INPUT_PROVIDER: ${{ github.event.inputs.provider || 'anthropic' }}
         run: |
-          if [ "${{ github.event.inputs.target_repo }}" = "." ]; then
+          if [ "$INPUT_TARGET_REPO" = "." ]; then
             TARGET_PATH="toolkit"
           else
             TARGET_PATH="target"
           fi
 
           echo "🔍 Analyzing: $TARGET_PATH"
-          echo "🤖 Provider:  ${{ github.event.inputs.provider || 'anthropic' }}"
+          echo "🤖 Provider:  $INPUT_PROVIDER"
           echo "📋 Dry-run mode — no files will be written"
           echo ""
 
           python -m agent_ready.cli \
             --target "$TARGET_PATH" \
-            --provider "${{ github.event.inputs.provider || 'anthropic' }}" \
+            --provider "$INPUT_PROVIDER" \
             --dry-run
 
       - name: Run verification (optional)
@@ -86,8 +88,10 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          INPUT_TARGET_REPO: ${{ github.event.inputs.target_repo }}
+          INPUT_PROVIDER: ${{ github.event.inputs.provider || 'anthropic' }}
         run: |
-          if [ "${{ github.event.inputs.target_repo }}" = "." ]; then
+          if [ "$INPUT_TARGET_REPO" = "." ]; then
             TARGET_PATH="toolkit"
           else
             TARGET_PATH="target"
@@ -96,21 +100,23 @@ jobs:
           echo "✅ Verifying generated context..."
           python -m agent_ready.cli \
             --target "$TARGET_PATH" \
-            --provider "${{ github.event.inputs.provider || 'anthropic' }}" \
+            --provider "$INPUT_PROVIDER" \
             --verify
         continue-on-error: true
 
       - name: Summary
         if: always()
+        env:
+          INPUT_PROVIDER: ${{ github.event.inputs.provider || 'anthropic' }}
         run: |
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "✅ Dry-run Complete"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
-          echo "Provider used: ${{ github.event.inputs.provider || 'anthropic' }}"
+          echo "Provider used: $INPUT_PROVIDER"
           echo "📋 Preview above shows what would be generated."
           echo ""
           echo "To run for real:"
-          echo "  agent-ready --target /path/to/repo --provider ${{ github.event.inputs.provider || 'anthropic' }}"
+          echo "  agent-ready --target /path/to/repo --provider $INPUT_PROVIDER"
           echo ""
