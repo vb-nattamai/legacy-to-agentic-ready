@@ -118,16 +118,16 @@ These terms have precise meanings in this codebase. Use them as defined — do n
 | Term | Definition |
 |---|---|
 | **agent-context.json** | Machine-readable JSON file containing both static (user-editable) and dynamic (LLM-generated) metadata about a repository, used to ground AI agents in verified facts about the codebase. |
-| **scaffolding files** | The complete set of generated output files — `AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `memory/schema.md` — that give AI agents verified knowledge of a repository. |
+| **scaffolding files** | The up-to-12 files AgentReady generates: `AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `mcp.json`, `memory/schema.md`, `.github/copilot-instructions.md`, `tools/refresh_context.py`, `.github/dependabot.yml`, `.github/CODEOWNERS`, `openapi.yaml` (REST APIs), `.agent-ready/custom_questions.json`. |
 | **context drift** | The condition where generated scaffolding files have become stale relative to actual code changes in the target repository. Detected weekly by the `context-drift-detector.yml` workflow. |
 | **readiness score** | A 100-point score computed in Phase 4 measuring how well-prepared a codebase is for AI agent interaction. |
 | **provider preset** | A named configuration (e.g. `anthropic`, `openai`, `google`) that maps the three pipeline phases (analysis, generation, evaluation) to specific LLM model strings. |
 | **Phase 1 — Collect** | The mechanical, LLM-free phase that reads the file tree, source files, config files, CI config, and README from the target repository. No LLM reasoning occurs here. |
 | **Phase 2 — Analyse** | The LLM-powered phase that sends collected code to a model (strongest tier) and receives structured JSON describing the repository's architecture, components, and pitfalls. |
 | **Phase 3 — Generate** | The LLM-powered phase that takes the analysis JSON and writes each scaffolding output file from scratch. |
-| **Phase 5 — Evaluate** | The assessment phase that generates 15 questions across 5 categories (commands, safety, domain, architecture, pitfalls) and measures whether the generated context files improve AI response quality compared to baseline. |
+| **Phase 5 — Evaluate** | The assessment phase that loads a versioned golden question set (13 base + language overlay = 13–19 questions), extracts ground truth from raw source code (not context files) using a haiku-class model, runs a weak-model baseline for comparison, applies a 3-judge panel for context responses, and measures hallucination rate. |
 | **restricted_write_paths** | Paths that AI agents must never modify, identified during analysis and recorded in `agent-context.json`. The list for this repo is: `LICENSE`, `VERSION`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/codeql.yml`. |
-| **MCP tool templates** | Language-specific scaffold files (Python, Java, TypeScript, Go) located in `src/agent_ready/templates/` for creating MCP-compatible tools. They use `{{PLACEHOLDER}}` syntax, not Jinja2. |
+| **workflow templates** | YAML workflow files in `src/agent_ready/templates/` installed into target repos by the installer (`agentic-ready.yml`, `context-drift-detector.yml`, `pr-review.yml`, `agentic-ready-eval.yml`). These are NOT language-specific MCP tool scaffolds — no Python/Java/Go tool files exist here. |
 
 ---
 
@@ -145,19 +145,27 @@ Each component below is a discrete unit of responsibility. Understand which comp
 
 ### Generator
 - **Path:** `src/agent_ready/generator.py`
-- **Responsibility:** Implements Phase 3 (Generate). Accepts the analysis JSON produced by the Analyser and uses an LLM to write each scaffolding output file (`AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `memory/schema.md`). Each file is written from scratch on every run.
+- **Responsibility:** Implements Phase 3 (Generate). Accepts the analysis JSON produced by the Analyser and uses an LLM to write up to 12 scaffolding files: `AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `mcp.json`, `memory/schema.md`, `.github/copilot-instructions.md`, `tools/refresh_context.py`, `.github/dependabot.yml`, `.github/CODEOWNERS`, `openapi.yaml` (REST APIs), `.agent-ready/custom_questions.json`. Each file is written from scratch on every run.
 
 ### Evaluator
 - **Path:** `src/agent_ready/evaluator.py`
-- **Responsibility:** Implements Phase 5 (Evaluate). Generates 15 questions across 5 categories (commands, safety, domain, architecture, pitfalls) and measures AI response quality with and without the generated context files loaded, producing a before/after readiness comparison.
+- **Responsibility:** Implements Phase 5 (Evaluate). Loads a versioned golden question set (13 base + language overlay = 13–19 questions), extracts non-circular ground truth from raw source code via `ground_truth.py`, runs a weak-model (haiku-class) baseline, applies a 3-judge panel for context responses, and measures hallucination rate. Produces `AGENTIC_EVAL.md`.
+
+### Ground Truth Extractor
+- **Path:** `src/agent_ready/ground_truth.py`
+- **Responsibility:** Extracts ground truth for each eval question from raw source files (not generated context). Uses a haiku-class model for extraction to prevent circular self-reference. This is what makes the v2 eval non-circular.
+
+### MCP Server
+- **Path:** `src/agent_ready/mcp_server.py`
+- **Responsibility:** Exposes AgentReady as an MCP server with four tools: `transform`, `score`, `evaluate`, `review_pr`. Started via the `agent-ready-mcp` command. 98% test coverage.
 
 ### Reviewer
 - **Path:** `src/agent_ready/reviewer.py`
 - **Responsibility:** PR review module. Reviews pull requests using LLM reasoning grounded in `agent-context.json`, then posts structured review comments back to GitHub via the GitHub API. Treats all PR diff content as untrusted input — it is sent to LLM APIs but never executed locally.
 
-### Tool Templates
+### Workflow Templates
 - **Path:** `src/agent_ready/templates/`
-- **Responsibility:** Language-specific MCP-compatible tool scaffolds for Python, Java, TypeScript, and Go. Files use `{{PLACEHOLDER}}` double-brace syntax for simple string replacement. This directory is excluded from `ruff` linting intentionally.
+- **Responsibility:** YAML workflow templates installed into target repos by the installer. Contains `agentic-ready.yml`, `context-drift-detector.yml`, `pr-review.yml`, and `agentic-ready-eval.yml`. **These are NOT language-specific MCP tool stubs.** No Python/Java/Go/TypeScript tool files exist here.
 
 ### Install Workflow
 - **Path:** `.github/workflows/install-to-target-repo.yml`

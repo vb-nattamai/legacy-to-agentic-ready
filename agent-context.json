@@ -1,7 +1,7 @@
 {
   "static": {
     "project_name": "agent-ready",
-    "description": "Transform any legacy repository into an AI-agent-ready codebase by generating scaffolding files (AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, memory/schema.md) using LLM-first analysis of actual code.",
+    "description": "Transform any legacy repository into an AI-agent-ready codebase by generating up to 12 scaffolding files (AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, mcp.json, memory/schema.md, .github/copilot-instructions.md, tools/refresh_context.py, .github/dependabot.yml, .github/CODEOWNERS, openapi.yaml, .agent-ready/custom_questions.json) using LLM-first analysis of actual code.",
     "primary_language": "Python",
     "frameworks": [
       "litellm",
@@ -32,16 +32,16 @@
     ],
     "domain_concepts": [
       "agent-context.json: Machine-readable JSON file containing both static (user-editable) and dynamic (LLM-generated) metadata about a repository, used to ground AI agents",
-      "scaffolding files: The set of generated files (AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, memory/schema.md) that give AI agents verified knowledge of a repository",
+      "scaffolding files: The up-to-12 files AgentReady generates: AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, mcp.json, memory/schema.md, .github/copilot-instructions.md, tools/refresh_context.py, .github/dependabot.yml, .github/CODEOWNERS, openapi.yaml (REST APIs), .agent-ready/custom_questions.json",
       "context drift: When the generated scaffolding files become stale relative to actual code changes, detected weekly by a drift detection workflow",
       "readiness score: A 100-point score measuring how well-prepared a codebase is for AI agent interaction",
       "provider preset: A named configuration mapping three pipeline phases (analysis, generation, evaluation) to specific LLM model strings",
       "Phase 1 \u2014 Collect: Mechanical file reading phase that gathers file tree, source files, config files, CI config, and README without any LLM reasoning",
       "Phase 2 \u2014 Analyse: LLM-powered phase that reads collected code and produces structured JSON understanding of the repository",
       "Phase 3 \u2014 Generate: LLM-powered phase that writes each output scaffolding file from scratch based on the analysis JSON",
-      "Phase 5 \u2014 Evaluate: Assessment phase that generates 15 questions across 5 categories and measures whether context files improve AI responses",
+      "Phase 5 \u2014 Evaluate: Assessment phase using a versioned golden question set (13 base + language overlay = 13\u201319 questions) with non-circular ground truth extracted from raw source code, a weak-model baseline (haiku-class), and hallucination detection. Measures whether context files genuinely improve AI responses.",
       "restricted_write_paths: Paths that AI agents must never modify, identified during analysis and recorded in agent-context.json",
-      "MCP tool templates: Language-specific scaffold files (Python, Java, TypeScript, Go) for creating MCP-compatible tools"
+      "MCP tool templates: Workflow YAML templates in src/agent_ready/templates/ used for installing trigger workflows into target repos. Do not confuse with the MCP server (mcp_server.py) which exposes transform/score/evaluate/review_pr as MCP tools."
     ]
   },
   "dynamic": {
@@ -63,9 +63,12 @@
       "agent_ready.generator": "src/agent_ready/generator.py",
       "agent_ready.evaluator": "src/agent_ready/evaluator.py",
       "agent_ready.reviewer": "src/agent_ready/reviewer.py",
+      "agent_ready.ground_truth": "src/agent_ready/ground_truth.py",
+      "agent_ready.mcp_server": "src/agent_ready/mcp_server.py",
+      "agent_ready.golden_sets": "src/agent_ready/golden_sets/",
       "agent_ready.templates": "src/agent_ready/templates"
     },
-    "architecture_summary": "AgentReady follows a 5-phase pipeline: Phase 1 (Collect) reads file tree and source files mechanically, Phase 2 (Analyse) sends collected code to an LLM for structured JSON analysis, Phase 3 (Generate) uses an LLM to write scaffolding files, Phase 4 (Score) computes a readiness score, and Phase 5 (Evaluate) measures improvement via 15 questions. The system is provider-agnostic via LiteLLM, supporting Anthropic, OpenAI, Google, Groq, Mistral, Together, and Ollama with tiered model selection per phase (strongest for analysis, fastest for evaluation).",
+    "architecture_summary": "AgentReady follows a 5-phase pipeline: Phase 1 (Collect) reads file tree and source files mechanically, Phase 2 (Analyse) sends collected code to an LLM for structured JSON analysis, Phase 3 (Generate) uses an LLM to write up to 12 scaffolding files, Phase 4 (Score) computes a readiness score, and Phase 5 (Evaluate) measures genuine improvement via a versioned golden question set (13\u201319 questions) with non-circular ground truth and weak-model baseline. The system is provider-agnostic via LiteLLM with tiered model selection per phase. An MCP server (agent-ready-mcp) exposes transform/score/evaluate/review_pr as MCP tools.",
     "key_components": [
       {
         "name": "CLI",
@@ -85,7 +88,7 @@
       {
         "name": "Evaluator",
         "path": "src/agent_ready/evaluator.py",
-        "responsibility": "Phase 5 (Evaluate) \u2014 generates 15 questions across 5 categories (commands, safety, domain, architecture, pitfalls) and measures AI response quality with and without context"
+        "responsibility": "Phase 5 (Evaluate) \u2014 uses a versioned golden question set (13 base + language overlay = 13\u201319 questions), extracts ground truth from raw source code (not context files) using a haiku-class model, runs a weak-model baseline for comparison, applies a 3-judge panel for context responses, and measures hallucination rate"
       },
       {
         "name": "Reviewer",
@@ -93,9 +96,24 @@
         "responsibility": "PR review module \u2014 reviews pull requests using LLM reasoning grounded in agent-context.json, posts structured review comments via GitHub API"
       },
       {
-        "name": "Tool Templates",
-        "path": "src/agent_ready/templates",
-        "responsibility": "Language-specific MCP-compatible tool scaffolds for Python, Java, TypeScript, and Go"
+        "name": "Ground Truth Extractor",
+        "path": "src/agent_ready/ground_truth.py",
+        "responsibility": "Extracts non-circular ground truth for eval v2 by sending raw source files (not generated context) to a haiku-class model; used by the Evaluator to prevent circular self-reference in scoring"
+      },
+      {
+        "name": "MCP Server",
+        "path": "src/agent_ready/mcp_server.py",
+        "responsibility": "Exposes AgentReady capabilities as MCP tools: transform, score, evaluate, review_pr. Started via the agent-ready-mcp command. 98% test coverage."
+      },
+      {
+        "name": "Golden Sets",
+        "path": "src/agent_ready/golden_sets/",
+        "responsibility": "Versioned question sets (base.json + language overlays) for reproducible eval benchmarking. Never generate questions dynamically — always load from these files."
+      },
+      {
+        "name": "Workflow Templates",
+        "path": "src/agent_ready/templates/",
+        "responsibility": "YAML workflow templates installed into target repos by the installer (agentic-ready.yml, context-drift-detector.yml, pr-review.yml, agentic-ready-eval.yml). These are NOT MCP tool scaffolds \u2014 do not look here for Python/Java/Go tool stubs."
       },
       {
         "name": "Install Workflow",

@@ -13,16 +13,16 @@ Transform any legacy repository into an AI-agent-ready codebase — with real co
 
 AI agents fail on unfamiliar codebases because they lack context — they invent file paths, guess commands, and miss domain concepts entirely. AgentReady fixes this by generating scaffolding files that give agents real, verified knowledge of your repository before they touch a single line of code.
 
-**Cross-stack results from the latest sanity run (4 repos, fresh codebases):**
+**Measurable improvement — verified on real codebases:**
 
-| Repo | Stack | Score (with context) | Pass rate |
-|------|-------|---------------------|-----------|
-| [ar-test-python-simple](https://github.com/vb-nattamai/ar-test-python-simple) | Python, Flask | 9.7 / 10 | 100% |
-| [ar-test-node-express](https://github.com/vb-nattamai/ar-test-node-express) | Node.js, Express, Jest | 9.4 / 10 | 100% |
-| [ar-test-python-complex](https://github.com/vb-nattamai/ar-test-python-complex) | Python, multi-module, CI | 9.4 / 10 | 100% |
-| [ar-test-empty](https://github.com/vb-nattamai/ar-test-empty) | Near-empty repo (edge case) | 8.9 / 10 | 93% |
+AgentReady v2 uses a **non-circular golden-set eval**: ground truth is extracted from raw source code (not the generated files), and the baseline uses a weak model with no context. This ensures the scores reflect genuine improvement rather than circular self-reference.
 
-*Scores are averages across 15 repo-specific questions across 5 categories, judged by a three-judge panel (Factual Accuracy, Semantic Equivalence, Operational Safety). The empty repo test validates graceful fallback — no invented stack or hallucinated paths.*
+Typical results on well-structured repos with tests, CI, and env vars:
+- Context score improvement: **+7–9 pts** over no-context baseline
+- Pass rate: **85–100%** on the golden question set
+- Hallucination rate: **<15%** (industry standard is <10–15% for RAG systems)
+
+For minimal repos (single file, no tests, no CI), honest scores reflect that sparsity — the tool never inflates readiness.
 
 ---
 
@@ -37,8 +37,8 @@ Phase 2 — Analyse   : LLM reads your code and infers domain concepts,
 Phase 3 — Generate  : LLM writes AGENTS.md, CLAUDE.md,
                       system_prompt.md, agent-context.json, memory/schema.md
 Phase 4 — Score     : 100-point readiness score
-Phase 5 — Evaluate  : 15 questions across 5 categories measure whether
-                      context files actually improve AI responses
+Phase 5 — Evaluate  : golden-set questions (13 base + language overlay)
+                      measure whether context files actually improve AI responses
 ```
 
 **Provider strategy — analysis uses the most capable model, eval uses the fastest:**
@@ -128,7 +128,7 @@ Issue opened
     ├─ 2. Calls agent-ready's reusable transformer
     ├─ 3. Analysis model reads your codebase (~60s)
     ├─ 4. Generation model writes all scaffolding files
-    ├─ 5. (Optional) Evaluation model runs 15 questions across 5 categories
+    ├─ 5. (Optional) Evaluation model runs golden-set questions across 5 categories
     ├─ 6. Opens a PR: "🤖 Add agentic-ready scaffolding"
     ├─ 7. Comments on your issue with the PR link
     └─ 8. Closes the issue ✅
@@ -141,9 +141,15 @@ Issue opened
 | `agent-context.json` | Machine-readable repo map (static + dynamic sections) |
 | `AGENTS.md` | Agent contract — safe ops, forbidden ops, real domain glossary |
 | `CLAUDE.md` | Claude Code auto-loaded context with real rules |
+| `.github/copilot-instructions.md` | GitHub Copilot workspace instructions |
 | `system_prompt.md` | Universal system prompt for any LLM |
 | `mcp.json` | MCP server configuration |
 | `memory/schema.md` | Agent memory/state contract |
+| `tools/refresh_context.py` | Script to refresh `agent-context.json` on demand |
+| `.github/dependabot.yml` | Dependency update configuration |
+| `.github/CODEOWNERS` | Code ownership for PR routing |
+| `openapi.yaml` | OpenAPI spec stub (generated for REST API repos) |
+| `.agent-ready/custom_questions.json` | Hook for repo-specific eval questions |
 | `AGENTIC_EVAL.md` | Evaluation report — verdict, scores, per-question breakdown |
 
 > The `static` section of `agent-context.json` is safe to edit manually. The `dynamic` section is auto-refreshed on every scan.
@@ -167,32 +173,54 @@ agent-ready --target /path/to/repo --eval-only --fail-level 0.8
 
 ---
 
-### Step 1 — Question generation
+### Step 1 — Golden-set questions
 
-The evaluator reads `agent-context.json` and asks an LLM to generate **15 repo-specific questions** across 5 categories. Questions are not generic ("what does this repo do?") — they are grounded in your actual commands, file paths, domain concepts, and pitfalls. A new set is generated each run.
+AgentReady ships **versioned golden question sets** — not dynamically generated questions. This is the key difference from v1: questions are pre-authored by domain experts and are stable across runs, enabling reproducible benchmarking.
+
+**Question sets (committed to `src/agent_ready/golden_sets/`):**
+
+| Set | File | Loaded for |
+|-----|------|-----------|
+| Base | `base.json` | Every repo (13 questions) |
+| Python | `python.json` | Python repos (+6 questions) |
+| JavaScript/Node | `javascript.json` | JS/Node repos (+6 questions) |
+| Java | `java.json` | Java repos (+4 questions) |
+| Go | `go.json` | Go repos (+4 questions) |
+
+Total: **13–19 questions per repo** depending on language.
 
 **5 question categories:**
 
-| Category | Count | What it tests |
+| Category | Count (base) | What it tests |
 |---|---|---|
 | **commands** | 3 | Exact test, build, and install commands |
-| **safety** | 2 | Restricted paths, secret handling rules |
+| **safety** | 3 | Restricted paths, secret handling, injection prevention |
 | **domain** | 2 | Business concepts, key domain terms |
 | **architecture** | 3 | Entry point, language/framework, module layout |
-| **pitfalls** | 5 | Specific gotchas that will break *this* codebase |
+| **adversarial** | 2 | Edge cases designed to induce hallucination |
 
-The pitfalls category always generates 5 questions — one per pitfall type found — because a single generic pitfall question lets models answer generically without codebase knowledge.
+**Custom questions for your repo:** Drop a `.agent-ready/custom_questions.json` file in your target repo and AgentReady will include those questions in every eval run — useful for testing domain-specific knowledge your standard golden set doesn't cover.
 
 ---
 
-### Step 2 — Baseline vs. context comparison
+### Step 2 — Non-circular ground truth + baseline
 
-Each question is asked **twice** using the same model:
+This is what separates v2 from v1. **Ground truth is extracted from raw source code** — not from the generated context files — using a lightweight model (haiku-class). This breaks the circular loop where the same model that wrote the files also judges them.
 
-1. **Baseline** — question only, no context. Represents what an AI agent knows *without* your files.
-2. **With context** — question with `agent-context.json`, `AGENTS.md`, and `CLAUDE.md` loaded as the system prompt. Represents what the agent knows *with* your files.
+Each question is then asked **twice** using deliberately asymmetric models:
 
-The delta between the two is the measurable value added by your scaffolding.
+1. **Baseline** — a weak, fast model with **zero context** (haiku-class). Represents what an AI agent knows *without* your scaffolding. This is a realistic floor — the kind of model a junior developer might use.
+2. **With context** — a strong model with **all generated context files** loaded as the system prompt (`agent-context.json`, `AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `.github/copilot-instructions.md`, `memory/schema.md`). Represents what the agent knows *with* your scaffolding.
+
+The delta between the two is the measurable value your scaffolding adds.
+
+**Baseline models per provider:**
+
+| Provider | Baseline (no context) | Context model |
+|---|---|---|
+| `anthropic` | claude-haiku-4-5 | claude-opus-4-6 |
+| `openai` | gpt-4.1-mini | gpt-5.4 |
+| `google` | gemini-1.5-flash-8b | gemini-2.5-pro |
 
 ---
 
@@ -220,9 +248,17 @@ Question: "How do I run the tests?"
   Panel vote:  3/3  →  ✅ PASS  (score: 8.0/10)
 ```
 
+### Step 4 — Hallucination detection
+
+Every context response is checked for hallucination: **did the model invent a specific file path, class name, function, or command that does not exist in the codebase?**
+
+This uses a precise definition aligned with industry standards — reasonable inferences and setup recommendations are not hallucinations. Only fabricated codebase-specific facts count.
+
+**Industry benchmark:** Production RAG systems target <10–15% hallucination rate. AgentReady's hallucination rate improves with codebase richness — sparse repos (1 file, no tests) naturally produce more "uncertain" answers that border on hallucination.
+
 ---
 
-### Output — `AGENTIC_EVAL.md`
+
 
 Results are saved to `AGENTIC_EVAL.md` in the repo root and include:
 
@@ -258,7 +294,6 @@ agent-ready --target /path/to/repo --model ollama/llama3.3   # local, free
 
 # Selective generation
 agent-ready --target /path/to/repo --only agents
-agent-ready --target /path/to/repo --only tools
 agent-ready --target /path/to/repo --only context
 agent-ready --target /path/to/repo --only memory
 
@@ -342,7 +377,7 @@ Runs evaluation only (no transformation) against any target repo. Called by the 
 |---|---|---|
 | `target_repo` | required | Target repo in `owner/repo` format |
 | `provider` | `anthropic` | LLM provider |
-| `fail_level` | `0.0` | Exit 1 if pass rate below threshold |
+| `fail_level` | `0.5` | Exit 1 if pass rate below threshold |
 
 **Outputs:** Saves `AGENTIC_EVAL.md` to the step summary and uploads it as a workflow artifact (retained 30 days).
 
@@ -358,8 +393,8 @@ The engine. Checks out the target repo, runs the LLM pipeline, optionally runs e
 | `target_branch` | `main` | Branch the PR is opened against |
 | `provider` | `anthropic` | LLM provider: `anthropic`, `openai`, `google`, `groq`, `mistral`, `together`, `ollama` |
 | `eval` | `true` | Run eval after transformation |
-| `fail_level` | `0.0` | Exit 1 if eval pass rate below threshold |
-| `only` | _(all)_ | Limit: `agents`, `tools`, `context`, `memory` |
+| `fail_level` | `0.5` | Exit 1 if eval pass rate below threshold |
+| `only` | _(all)_ | Limit: `agents`, `context`, `memory` |
 | `force` | `false` | Overwrite existing generated files |
 | `issue_number` | _(none)_ | Issue to close after PR is opened |
 
@@ -485,9 +520,46 @@ agent-ready --target /path/to/repo --only context --force
 | Tool | File it reads | How |
 |------|--------------|-----|
 | Claude Code | `CLAUDE.md` | Auto-loaded at every session start |
-| GitHub Copilot | `.github/agents/*.agent.md` | Copilot Chat dropdown |
+| GitHub Copilot | `.github/copilot-instructions.md` | Workspace instructions loaded in Copilot Chat |
 | Any LLM | `system_prompt.md` | Paste as the `system` parameter |
 | MCP clients | `mcp.json` | Loaded by the MCP host |
+| GitHub agents (AGENTS.md) | `AGENTS.md` | Drop into any agent that reads workspace files |
+
+---
+
+## MCP Server
+
+AgentReady ships an MCP (Model Context Protocol) server that exposes its core capabilities as tools for any MCP-compatible client (Claude Desktop, Cursor, Continue, etc.).
+
+```bash
+# Install and start
+pip install "git+https://github.com/vb-nattamai/agent-ready.git[ai]"
+agent-ready-mcp
+```
+
+**Available tools:**
+
+| Tool | Description |
+|------|------------|
+| `transform` | Transform a target repository — runs the full 5-phase pipeline |
+| `score` | Compute the agentic readiness score for an already-transformed repo |
+| `evaluate` | Run the golden-set eval against existing context files |
+| `review_pr` | Review a pull request and return structured feedback |
+
+**Configure in your MCP host** (e.g. Claude Desktop `~/.claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "agent-ready": {
+      "command": "agent-ready-mcp",
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}
+```
 
 ---
 

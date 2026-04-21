@@ -77,13 +77,13 @@ agent-ready --target /path/to/repo --eval-only
 ## Architecture Notes
 
 ### 1. Five-Phase Pipeline (Collect → Analyse → Generate → Score → Evaluate)
-The core pipeline in `src/agent_ready/cli.py` runs five sequential phases. **Phase 1 (Collect)** is purely mechanical file I/O in `analyser.py` — no LLM. **Phase 2 (Analyse)** sends collected files to the strongest available model for structured JSON understanding. **Phase 3 (Generate)** uses an LLM to write all five scaffolding files from that JSON. **Phase 4 (Score)** computes a 100-point readiness score from the analysis. **Phase 5 (Evaluate)** in `evaluator.py` generates 15 questions across 5 categories (commands, safety, domain, architecture, pitfalls) and measures response quality with and without context files. Each phase is isolated — if you add a feature, identify which phase owns it before editing.
+The core pipeline in `src/agent_ready/cli.py` runs five sequential phases. **Phase 1 (Collect)** is purely mechanical file I/O in `analyser.py` — no LLM. **Phase 2 (Analyse)** sends collected files to the strongest available model for structured JSON understanding. **Phase 3 (Generate)** uses an LLM to write up to 12 scaffolding files from that JSON. **Phase 4 (Score)** computes a 100-point readiness score from the analysis. **Phase 5 (Evaluate)** in `evaluator.py` loads a versioned golden question set (13 base + language overlay = 13–19 questions), extracts ground truth from raw source code (non-circular), runs a weak-model baseline, and measures response quality with the full context bundle. Each phase is isolated — if you add a feature, identify which phase owns it before editing.
 
 ### 2. Provider-Agnostic via LiteLLM with Tiered Model Selection
 `src/agent_ready/cli.py` selects LLM providers through named **provider presets**, each mapping three pipeline phases (analysis, generation, evaluation) to distinct model strings. The analysis phase always uses the strongest model; evaluation uses the fastest. Passing `--model` on the CLI **overrides all three phases** with a single model — useful for testing but loses the tier optimization. LiteLLM (installed via the `[ai]` extra) handles all provider routing; the core package has **zero hard LLM dependencies** and will `ImportError` if `litellm` is absent.
 
 ### 3. Circular Analysis Prevention via `SKIP_AGENT_FILES`
-`src/agent_ready/analyser.py` maintains a `SKIP_AGENT_FILES` set containing the names of all files AgentReady itself generates (`AGENTS.md`, `CLAUDE.md`, `agent-context.json`, `system_prompt.md`, `memory/schema.md`). The Phase 1 collector skips these files when reading a target repo, preventing the LLM from reasoning about stale scaffolding instead of actual source code. Any new output file added to the generator **must** be added to this set.
+`src/agent_ready/analyser.py` maintains a `SKIP_AGENT_FILES` set containing the names of all files AgentReady itself generates (`AGENTS.md`, `CLAUDE.md`, `agent-context.json`, `system_prompt.md`, `memory/schema.md`, `mcp.json`, `.github/copilot-instructions.md`, etc.). The Phase 1 collector skips these files when reading a target repo, preventing the LLM from reasoning about stale scaffolding instead of actual source code. Any new output file added to the generator **must** be added to this set.
 
 ### 4. PR Reviewer is a Separate, Trust-Isolated Module
 `src/agent_ready/reviewer.py` is a distinct execution path from the main transformation pipeline. It reads `agent-context.json` from a target repo, fetches PR diffs via the GitHub API, and sends them to an LLM for structured review comments. All PR diff content is treated as **untrusted** — it is forwarded to LLM APIs but never parsed as code or executed locally. This module is invoked via `agent-ready --review` and requires `GH_TOKEN` and `PR_NUMBER` environment variables.
@@ -94,13 +94,13 @@ The core pipeline in `src/agent_ready/cli.py` runs five sequential phases. **Pha
 
 | Term | Meaning in this codebase |
 |---|---|
-| **scaffolding files** | The five files AgentReady writes: `AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `memory/schema.md`. Together they give AI agents verified, grounded knowledge of a repository. |
+| **scaffolding files** | The up-to-12 files AgentReady writes: `AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `mcp.json`, `memory/schema.md`, `.github/copilot-instructions.md`, `tools/refresh_context.py`, `.github/dependabot.yml`, `.github/CODEOWNERS`, `openapi.yaml` (REST APIs), `.agent-ready/custom_questions.json`. Together they give AI agents verified, grounded knowledge of a repository. |
 | **agent-context.json** | Machine-readable JSON with both a static section (human-editable, persisted across runs) and a dynamic section (overwritten each run by the LLM). Do not conflate the two sections when reading or writing. |
 | **readiness score** | A 100-point integer computed in Phase 4 from the analysis JSON. It measures how much structured knowledge the generated files provide to an AI agent. This score is surfaced in PR descriptions by the transformer workflow. |
 | **provider preset** | A named constant in `cli.py` mapping `{"analysis": "...", "generation": "...", "evaluation": "..."}` model strings. Presets exist for Anthropic, OpenAI, Google, Groq, Mistral, Together, and Ollama. |
 | **context drift** | Staleness of generated scaffolding files relative to actual code. Detected weekly by `.github/workflows/context-drift-detector.yml`, which re-runs Phase 2 (Analyse) and diffs the output against committed files. |
 | **restricted_write_paths** | Paths no agent (including this one) may modify: `LICENSE`, `VERSION`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/codeql.yml`. |
-| **MCP tool templates** | Language-specific scaffold files in `src/agent_ready/templates/` (Python, Java, TypeScript, Go) using `{{PLACEHOLDER}}` double-brace substitution. These are emitted when a user requests MCP-compatible tool stubs. |
+| **workflow templates** | YAML workflow files in `src/agent_ready/templates/` installed into target repos. These are NOT language-specific MCP tool scaffolds — no Python/Java/Go tool stubs exist. The MCP server is `src/agent_ready/mcp_server.py`. |
 
 ---
 

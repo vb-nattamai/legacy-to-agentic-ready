@@ -2,7 +2,7 @@
 
 # System Prompt — agent-ready
 
-You are working on **agent-ready**, a Python tool that transforms any legacy repository into an AI-agent-ready codebase by generating scaffolding files (`AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `memory/schema.md`) using LLM-first analysis of actual source code.
+You are working on **agent-ready**, a Python tool that transforms any legacy repository into an AI-agent-ready codebase by generating up to 12 scaffolding files (`AGENTS.md`, `CLAUDE.md`, `system_prompt.md`, `agent-context.json`, `mcp.json`, `memory/schema.md`, `.github/copilot-instructions.md`, `tools/refresh_context.py`, `.github/dependabot.yml`, `.github/CODEOWNERS`, `openapi.yaml`, `.agent-ready/custom_questions.json`) using LLM-first analysis of actual source code.
 
 ---
 
@@ -59,7 +59,7 @@ Also never push directly to `main` — all changes go through PRs. Never commit 
 | 2 | Analyse | LLM reads code → structured JSON |
 | 3 | Generate | LLM writes scaffolding files from JSON |
 | 4 | Score | Computes 100-point readiness score |
-| 5 | Evaluate | 15 questions across 5 categories measure context quality |
+| 5 | Evaluate | Golden-set questions (13–19) with non-circular ground truth + weak-model baseline |
 
 The system is provider-agnostic via LiteLLM, supporting Anthropic, OpenAI, Google, Groq, Mistral, Together, and Ollama. Each provider preset maps three phases to three different models (analysis → strongest, evaluation → fastest).
 
@@ -71,16 +71,18 @@ The system is provider-agnostic via LiteLLM, supporting Anthropic, OpenAI, Googl
 |---|---|---|
 | CLI | `src/agent_ready/cli.py` | Entry point; orchestrates pipeline, provider selection, dry-run/eval-only/review modes |
 | Analyser | `src/agent_ready/analyser.py` | Phase 1 + 2 — file collection and LLM-powered structured analysis |
-| Generator | `src/agent_ready/generator.py` | Phase 3 — writes all scaffolding files from analysis JSON |
-| Evaluator | `src/agent_ready/evaluator.py` | Phase 5 — question generation and response quality measurement |
+| Generator | `src/agent_ready/generator.py` | Phase 3 — writes up to 12 scaffolding files from analysis JSON |
+| Evaluator | `src/agent_ready/evaluator.py` | Phase 5 — golden-set eval with non-circular GT, weak-model baseline, hallucination detection |
+| Ground Truth | `src/agent_ready/ground_truth.py` | Extracts GT from raw source code (not generated files) for non-circular eval |
+| MCP Server | `src/agent_ready/mcp_server.py` | Exposes transform/score/evaluate/review_pr as MCP tools via agent-ready-mcp command |
 | Reviewer | `src/agent_ready/reviewer.py` | PR review via LLM grounded in agent-context.json; posts GitHub comments |
-| Templates | `src/agent_ready/templates/` | MCP-compatible tool scaffolds for Python, Java, TypeScript, Go |
+| Workflow Templates | `src/agent_ready/templates/` | YAML workflows installed into target repos — NOT language MCP tool stubs |
 
 ---
 
 ## Domain Concepts
 
-- **scaffolding files** — The generated set of files that give AI agents verified knowledge of a repo
+- **scaffolding files** — Up to 12 generated files that give AI agents verified knowledge of a repo (AGENTS.md, CLAUDE.md, system_prompt.md, agent-context.json, mcp.json, memory/schema.md, .github/copilot-instructions.md, tools/refresh_context.py, .github/dependabot.yml, .github/CODEOWNERS, openapi.yaml, .agent-ready/custom_questions.json)
 - **agent-context.json** — Machine-readable JSON with static (user-editable) and dynamic (LLM-generated) repo metadata
 - **context drift** — When scaffolding files become stale; detected weekly by the drift detection workflow
 - **readiness score** — 100-point measure of AI-agent preparedness
