@@ -150,14 +150,33 @@ def load_golden_questions(language: str, extra_questions: list[dict] | None = No
 
 
 def _load_custom_questions(target: Path) -> list[dict]:
-    """Load repo-specific custom golden questions from .agent-ready/custom_questions.json."""
+    """Load repo-specific custom golden questions from .agent-ready/custom_questions.json.
+
+    Supports two formats:
+    - Plain list: [{...}, {...}]
+    - Wrapper object: {"questions": [{...}, {...}], "_instructions": "..."}
+
+    Questions with underscore-prefixed field names (e.g. "_id") are disabled stubs
+    and are silently skipped.
+    """
     custom_path = target / ".agent-ready" / "custom_questions.json"
-    if custom_path.exists():
-        try:
-            return json.loads(custom_path.read_text())
-        except Exception:
-            pass
-    return []
+    if not custom_path.exists():
+        return []
+    try:
+        raw = json.loads(custom_path.read_text())
+        # Unwrap {"questions": [...]} wrapper format
+        if isinstance(raw, dict):
+            raw = raw.get("questions", [])
+        if not isinstance(raw, list):
+            return []
+        # Skip disabled stub questions (all keys start with "_")
+        active = [
+            q for q in raw
+            if isinstance(q, dict) and any(not k.startswith("_") for k in q)
+        ]
+        return active
+    except Exception:
+        return []
 
 
 # ── Judge ─────────────────────────────────────────────────────────────────────
