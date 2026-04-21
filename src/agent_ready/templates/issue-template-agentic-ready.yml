@@ -28,6 +28,20 @@ body:
         ---
 
   - type: dropdown
+    id: provider
+    attributes:
+      label: LLM provider
+      description: "Which LLM provider to use for analysis and generation."
+      options:
+        - "anthropic (default — Claude Opus)"
+        - "openai (GPT-4)"
+        - "google (Gemini)"
+        - "groq (Llama 3)"
+        - "mistral"
+    validations:
+      required: true
+
+  - type: dropdown
     id: scope
     attributes:
       label: What to generate

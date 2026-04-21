@@ -3,10 +3,15 @@ on:
   # Run manually from the Actions tab at any time
   workflow_dispatch:
     inputs:
+      provider:
+        description: 'LLM provider (anthropic | openai | google | groq | mistral)'
+        required: false
+        default: 'anthropic'
+        type: string
       fail_level:
         description: 'Fail if eval pass rate is below this threshold (0.0-1.0)'
         required: false
-        default: '0.0'
+        default: '0.5'
         type: string
 
   # Run automatically after every push to the default branch so that
@@ -28,6 +33,6 @@ jobs:
     uses: vb-nattamai/agent-ready/.github/workflows/reusable-eval.yml@main
     with:
       target_repo: ${{ github.repository }}
-      provider: anthropic
-      fail_level: ${{ inputs.fail_level || '0.0' }}
+      provider: ${{ inputs.provider || vars.AGENT_READY_PROVIDER || 'anthropic' }}
+      fail_level: ${{ inputs.fail_level || '0.5' }}
     secrets: inherit

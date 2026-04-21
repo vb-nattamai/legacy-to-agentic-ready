@@ -2,6 +2,30 @@ name: Agentic Ready
 on:
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'LLM provider (anthropic | openai | google | groq | mistral)'
+        required: false
+        default: 'anthropic'
+        type: string
+      fail_level:
+        description: 'Fail if eval pass rate is below this (0.0–1.0, default 0.5)'
+        required: false
+        default: '0.5'
+        type: string
+      force:
+        description: 'Overwrite existing scaffolding files'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Override this variable in your repo settings → Actions → Variables
+  # to switch providers without editing this file.
+  # Valid values: anthropic | openai | google | groq | mistral
+  AGENT_READY_PROVIDER: ${{ vars.AGENT_READY_PROVIDER || 'anthropic' }}
+
 jobs:
   check-permission:
     if: contains(github.event.issue.labels.*.name, 'agentic-ready')
@@ -40,9 +64,9 @@ jobs:
       target_repo: ${{ github.repository }}
       target_branch: ${{ github.event.repository.default_branch }}
       issue_number: ${{ github.event.issue.number }}
-      provider: anthropic
+      provider: ${{ inputs.provider || vars.AGENT_READY_PROVIDER || 'anthropic' }}
       eval: true
-      fail_level: '0.0'
-      force: false
+      fail_level: ${{ inputs.fail_level || '0.5' }}
+      force: ${{ inputs.force || false }}
       only: ''
     secrets: inherit

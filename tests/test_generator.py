@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import sys
 from datetime import datetime
@@ -8,6 +9,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from agent_ready import generator
+from agent_ready.generator import (
+    _is_rest_api,
+    build_codeowners,
+    build_custom_questions_starter,
+    build_dependabot_yml,
+    build_openapi_stub,
+    build_refresh_context_script,
+)
 
 
 def _analysis_payload() -> dict[str, object]:
@@ -104,3 +113,157 @@ def test_generate_only_context_updates_dynamic_without_clobbering_static(tmp_pat
     assert any(
         path == "agent-context.json" and status.startswith("🔄") for path, status in generated
     )
+
+
+# ── build_refresh_context_script ─────────────────────────────────────────────
+
+
+def test_refresh_context_script_is_valid_python() -> None:
+    script = build_refresh_context_script(_analysis_payload())
+    ast.parse(script)  # raises SyntaxError if invalid
+
+
+def test_refresh_context_script_contains_project_name() -> None:
+    script = build_refresh_context_script({"project_name": "my-cool-api"})
+    assert "my-cool-api" in script
+
+
+def test_refresh_context_script_contains_cli_invocation() -> None:
+    script = build_refresh_context_script(_analysis_payload())
+    assert "agent_ready.cli" in script
+    assert "--only" in script
+    assert "context" in script
+
+
+def test_generate_only_context_also_writes_refresh_script(tmp_path: Path) -> None:
+    gen = generator.LLMGenerator(
+        target=tmp_path,
+        analysis=_analysis_payload(),
+        generation_model="unused",
+        quiet=True,
+    )
+    generated = gen.generate_only("context")
+    paths = [p for p, _ in generated]
+    assert "tools/refresh_context.py" in paths
+    assert (tmp_path / "tools" / "refresh_context.py").exists()
+
+
+# ── build_dependabot_yml ──────────────────────────────────────────────────────
+
+
+def test_dependabot_pip_ecosystem() -> None:
+    out = build_dependabot_yml({"build_system": "pip", "primary_language": "python"})
+    assert "package-ecosystem: pip" in out
+    assert "github-actions" in out
+
+
+def test_dependabot_npm_ecosystem() -> None:
+    out = build_dependabot_yml({"build_system": "npm", "primary_language": "javascript"})
+    assert "package-ecosystem: npm" in out
+
+
+def test_dependabot_unknown_falls_back_to_pip() -> None:
+    out = build_dependabot_yml({"build_system": "unknown", "primary_language": "cobol"})
+    assert "package-ecosystem: pip" in out
+
+
+def test_dependabot_always_includes_github_actions() -> None:
+    for build_sys in ("pip", "npm", "maven", "go"):
+        out = build_dependabot_yml({"build_system": build_sys})
+        assert "github-actions" in out, f"Missing github-actions for {build_sys}"
+
+
+# ── build_custom_questions_starter ───────────────────────────────────────────
+
+
+def test_custom_questions_starter_is_valid_json() -> None:
+    out = build_custom_questions_starter(_analysis_payload())
+    parsed = json.loads(out)
+    assert "questions" in parsed
+    assert len(parsed["questions"]) >= 1
+
+
+def test_custom_questions_starter_questions_are_prefixed() -> None:
+    """All question fields should use underscore prefix — disabled by default."""
+    out = build_custom_questions_starter(_analysis_payload())
+    parsed = json.loads(out)
+    for q in parsed["questions"]:
+        for key in q:
+            if key != "_comment":
+                assert key.startswith("_"), f"Field {key!r} should be prefixed with '_'"
+
+
+def test_custom_questions_starter_contains_project_name() -> None:
+    out = build_custom_questions_starter({"project_name": "my-service", "primary_language": "go"})
+    assert "my-service" in out
+
+
+# ── build_openapi_stub / _is_rest_api ─────────────────────────────────────────
+
+
+def test_is_rest_api_detects_flask() -> None:
+    assert _is_rest_api({"frameworks": ["flask"]})
+
+
+def test_is_rest_api_detects_express() -> None:
+    assert _is_rest_api({"frameworks": ["express"]})
+
+
+def test_is_rest_api_false_for_cli_tool() -> None:
+    assert not _is_rest_api({"frameworks": ["click", "typer"]})
+
+
+def test_is_rest_api_false_for_no_frameworks() -> None:
+    assert not _is_rest_api({})
+
+
+def test_openapi_stub_is_valid_yaml() -> None:
+    import yaml
+    out = build_openapi_stub({"project_name": "test-api", "frameworks": ["fastapi"], "primary_language": "python"})
+    # strip the comment header before parsing
+    body = "\n".join(line for line in out.splitlines() if not line.startswith("#"))
+    parsed = yaml.safe_load(body)
+    assert parsed["openapi"] == "3.1.0"
+    assert "/health" in parsed["paths"]
+
+
+def test_openapi_stub_only_generated_for_rest_api(tmp_path: Path) -> None:
+    analysis = _analysis_payload()
+    analysis["frameworks"] = ["click"]  # not a REST framework
+    analysis["has_openapi"] = False
+
+    gen = generator.LLMGenerator(target=tmp_path, analysis=analysis, generation_model="unused", quiet=True)
+    # only test the openapi-specific method — avoids LLM calls
+    gen._openapi_stub()
+    paths = [p for p, _ in gen.generated]
+    assert "openapi.yaml" not in paths
+
+
+def test_openapi_stub_skipped_when_already_has_openapi(tmp_path: Path) -> None:
+    analysis = _analysis_payload()
+    analysis["frameworks"] = ["flask"]
+    analysis["has_openapi"] = True  # already exists
+
+    gen = generator.LLMGenerator(target=tmp_path, analysis=analysis, generation_model="unused", quiet=True)
+    gen._openapi_stub()
+    paths = [p for p, _ in gen.generated]
+    assert "openapi.yaml" not in paths
+
+
+# ── build_codeowners ──────────────────────────────────────────────────────────
+
+
+def test_codeowners_includes_key_generated_files() -> None:
+    out = build_codeowners({})
+    for filename in ("agent-context.json", "AGENTS.md", "CLAUDE.md", "memory/", ".github/workflows/"):
+        assert filename in out, f"Missing {filename} in CODEOWNERS"
+
+
+def test_codeowners_includes_restricted_paths() -> None:
+    out = build_codeowners({"restricted_write_paths": [".github/workflows", "src/migrations"]})
+    assert "src/migrations/" in out
+
+
+def test_codeowners_is_not_empty() -> None:
+    out = build_codeowners(_analysis_payload())
+    assert len(out.strip()) > 0
