@@ -95,6 +95,7 @@ def build_agent_context(
         "project_name": analysis.get("project_name", ""),
         "description": analysis.get("description", ""),
         "primary_language": analysis.get("primary_language", ""),
+        "runtime_version": analysis.get("runtime_version", ""),
         "frameworks": analysis.get("frameworks", []),
         "entry_point": analysis.get("entry_point", ""),
         "test_command": test_command,
