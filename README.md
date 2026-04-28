@@ -75,8 +75,10 @@ The output is a pull request containing all generated files and a quantified eva
 | `system_prompt.md` | Universal system prompt compatible with any LLM interface |
 | `agent-context.json` | Machine-readable repository map with static and dynamic sections |
 | `mcp.json` | MCP server configuration for Claude and MCP-compatible clients |
+| `openapi.yaml` | Auto-generated OpenAPI 3.1 stub — fill in paths and schemas, validate with Redocly |
 | `memory/schema.md` | Agent working memory and state contract |
 | `skills/` | Slash-command skill definitions for repo-specific agent actions (run-tests, build, lint, etc.) |
+| `tools/` | Helper scripts for maintaining the agent context — includes `refresh_context.py` to re-run AgentReady and keep `agent-context.json` current as the codebase evolves |
 | `hooks/` | Session-continuity hooks for Claude Code (session-start, pre-tool-call, post-test, pre-commit) |
 | `AGENTIC_EVAL.md` | Evaluation report showing baseline and with-context scores per category |
 
