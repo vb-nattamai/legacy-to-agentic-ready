@@ -274,6 +274,7 @@ pip install -e '.[dev]'
 | `agent-ready --target /path/to/repo --eval` | Run evaluation after transformation |
 | `agent-ready --target /path/to/repo --eval-only` | Run evaluation against existing files only |
 | `agent-ready --target /path/to/repo --review-pr 42` | Run PR review agent against PR number 42 |
+| `agent-ready --target /path/to/repo --eval --fail-level 0.8` | Fail if eval pass rate is below 80% — use as a CI gate |
 | `agent-ready --target /path/to/repo --quiet` | Suppress output for CI pipelines |
 
 ---
