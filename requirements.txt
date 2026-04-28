@@ -1,2 +1,2 @@
 # anthropic is optional — only needed for LLM-enhanced generation
-anthropic>=0.40.0
+anthropic>=0.97.0
