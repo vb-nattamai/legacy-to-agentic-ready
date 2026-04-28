@@ -25,6 +25,7 @@ AgentReady addresses this at the source. It analyses a repository's structure, s
 - [Skills and Hooks](#skills-and-hooks)
 - [Evaluation Framework](#evaluation-framework)
 - [Quick Start](#quick-start)
+- [Cost and Time](#cost-and-time)
 - [Requirements](#requirements)
 - [CLI Reference](#cli-reference)
 - [GitHub Actions Integration](#github-actions-integration)
@@ -165,6 +166,61 @@ The recommended path is the one-click installer available in the AgentReady Acti
 5. The transformation runs automatically and opens a pull request with all generated files
 
 Review the pull request, fill in the `static` section of `agent-context.json` with project-specific details, and merge.
+
+For a complete example of what AgentReady generates, see [`examples/hello_world_output/`](examples/hello_world_output/) — a full transformation output against a minimal Python/Flask project, including skills, hooks, and all context files.
+
+---
+
+## Cost and Time
+
+### How long does a transformation take?
+
+A full transformation on a typical repository takes 3-8 minutes end to end.
+
+| Phase | Approximate time |
+|---|---|
+| Analysis (reads codebase) | 30-90 seconds |
+| Generation (writes all files) | 60-180 seconds |
+| Evaluation (19 questions) | 60-120 seconds |
+| Total | 3-8 minutes |
+
+Time scales with repository size. A minimal single-file repo completes in under 3 minutes. A large multi-module repo with many source files may take up to 10 minutes.
+
+### How many LLM calls does it make?
+
+A full transformation makes approximately 50-65 LLM calls depending on which artifacts are generated.
+
+| Stage | Calls |
+|---|---|
+| Analysis | 1 |
+| Generation (per artifact) | 1 per file — approximately 8-12 total |
+| Skill generation | 1 per skill — 2-8 depending on repo |
+| Hook generation | 1 per hook — 2-4 depending on repo |
+| Evaluation (19 questions × 2 models) | 38 |
+| Total | Approximately 50-65 |
+
+### Approximate cost per provider
+
+Costs are estimates based on a minimal repository. Larger repos with more source files will cost more due to longer analysis input.
+
+| Provider | Model tier | Approximate cost per run |
+|---|---|---|
+| Anthropic (default) | Opus / Sonnet / Haiku | $0.15 - $0.40 |
+| OpenAI | GPT-4o / GPT-4o-mini | $0.10 - $0.30 |
+| Google | Gemini 2.5 Pro / Flash | $0.05 - $0.20 |
+| Groq | Llama 3.3 70B | $0.01 - $0.05 |
+| Mistral | Large / Small | $0.05 - $0.15 |
+| Together | Qwen / Llama | $0.02 - $0.08 |
+| Ollama | Local models | Free (local compute only) |
+
+> These are estimates based on typical repository sizes. Your actual cost depends on the number of source files, their length, and which artifacts are generated. Run with `--dry-run` first to preview what will be generated without incurring any cost.
+
+### How to reduce cost
+
+- Use `--provider groq` or `--provider together` for the lowest cost per run.
+- Use `--eval-only` or omit `--eval` to skip the evaluation step — this removes the 38 evaluation calls and reduces cost by approximately 60%.
+- Use `--only agents` or `--only context` to regenerate specific artifacts only, rather than running the full pipeline.
+- Use Ollama for fully local, zero-cost runs (quality will vary by model).
 
 ---
 

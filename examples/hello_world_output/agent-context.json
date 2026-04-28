@@ -1,0 +1,74 @@
+{
+  "static": {
+    "project_name": "hello_world",
+    "description": "A minimal Flask REST API that provides a greeting endpoint, a health check endpoint, and a personalised greeting endpoint.",
+    "primary_language": "Python",
+    "runtime_version": "3.11",
+    "frameworks": [
+      "Flask"
+    ],
+    "entry_point": "app.py",
+    "test_command": "pytest -q --cov=app",
+    "restricted_write_paths": [],
+    "environment_variables": [
+      "GREETING",
+      "PORT"
+    ],
+    "domain_concepts": [
+      "Greeting: The configurable salutation word (default 'Hello') used in all API responses.",
+      "Health Check: A lightweight endpoint (/health) that returns service availability status."
+    ]
+  },
+  "dynamic": {
+    "last_scanned": "2026-04-28T15:22:00.782073+00:00",
+    "secondary_languages": [],
+    "build_system": "pip",
+    "build_command": "",
+    "install_command": "pip install -r requirements.txt -r requirements-dev.txt",
+    "run_command": "python app.py",
+    "test_framework": "pytest",
+    "test_directory": "tests",
+    "source_directories": [
+      "."
+    ],
+    "module_layout": {
+      "app": "app.py"
+    },
+    "architecture_summary": "Single-module Flask application exposing three REST endpoints. The app reads configuration from environment variables and serves JSON responses. There is no database or external service dependency; it is a self-contained HTTP server.",
+    "key_components": [
+      {
+        "name": "app",
+        "path": "app.py",
+        "responsibility": "Defines the Flask application, all route handlers, and the server entry point."
+      },
+      {
+        "name": "test_app",
+        "path": "tests/test_app.py",
+        "responsibility": "Contains tests for the Flask application endpoints."
+      }
+    ],
+    "agent_safe_operations": [
+      "Adding new route handlers in app.py",
+      "Adding new test cases in tests/test_app.py",
+      "Updating requirements.txt or requirements-dev.txt with new dependencies",
+      "Modifying greeting logic or response formats"
+    ],
+    "agent_forbidden_operations": [
+      "Removing the /health endpoint (used for availability monitoring)",
+      "Changing the default host binding (0.0.0.0) without explicit instruction",
+      "Removing existing environment variable support (GREETING, PORT)"
+    ],
+    "potential_pitfalls": [
+      "The app module is a single file (app.py) at the repo root, not a package \u2014 imports reference 'app' directly.",
+      "The Flask app object and the module share the name 'app', which can cause confusion when importing in tests.",
+      "GREETING is read once at module load time; changing the environment variable after import has no effect without reloading.",
+      "No requirements-dev.txt content was provided \u2014 ensure pytest and pytest-cov are listed there before running tests."
+    ],
+    "conventions": {
+      "naming": "snake_case",
+      "structure": "single-package"
+    },
+    "has_ci": true,
+    "has_openapi": false
+  }
+}
