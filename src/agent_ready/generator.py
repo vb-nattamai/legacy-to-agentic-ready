@@ -69,6 +69,25 @@ def _analysis_block(analysis: dict[str, Any]) -> str:
     return json.dumps(analysis, indent=2)
 
 
+def _compact_analysis_for_prompt(analysis: dict[str, Any]) -> str:
+    """Extract only the fields needed for skill/hook generation to avoid token bloat."""
+    compact = {
+        "primary_language": analysis.get("primary_language"),
+        "frameworks": analysis.get("frameworks", []),
+        "build_system": analysis.get("build_system"),
+        "test_command": analysis.get("test_command"),
+        "build_command": analysis.get("build_command"),
+        "install_command": analysis.get("install_command"),
+        "run_command": analysis.get("run_command"),
+        "test_framework": analysis.get("test_framework"),
+        "test_directory": analysis.get("test_directory"),
+        "entry_point": analysis.get("entry_point"),
+        "restricted_write_paths": analysis.get("restricted_write_paths", []),
+        "potential_pitfalls": analysis.get("potential_pitfalls", []),
+    }
+    return json.dumps(compact, indent=2)
+
+
 def _pitfalls_block(analysis: dict[str, Any]) -> str:
     pitfalls = analysis.get("potential_pitfalls", [])
     if not pitfalls:
@@ -189,6 +208,21 @@ Write as if a senior engineer on this team authored it for an AI agent joining t
 
 
 def generate_claude_md(model: str, analysis: dict[str, Any]) -> str:
+    expected_skills = detect_skills(analysis)
+    if expected_skills:
+        skill_lines = "\n".join(
+            f"   - `skills/{name}.md` — {_SKILL_DESCRIPTIONS.get(name, name)}"
+            for name in expected_skills
+        )
+        skills_section = f"""
+
+8. ## Available Skills
+   Slash-command skill definitions generated for this repo. Each file is a
+   self-contained instruction set grounded in the commands above.
+{skill_lines}"""
+    else:
+        skills_section = ""
+
     return _call(
         model,
         f"""\
@@ -233,18 +267,7 @@ No generic software engineering advice.
 
 7. ## After Every Change
    Specific checklist including the test command.
-
-8. ## Available Skills
-   List each skill that will be generated in skills/ based on this analysis.
-   Format each entry as: `skills/<name>.md` — <one-line purpose>.
-   Skills to list (generate only those applicable to this repo):
-   - run-tests, build (always)
-   - lint (if linter detected)
-   - start-local (if Docker detected)
-   - run-migrations (if migration framework detected)
-   - run-ci (if CI config present)
-   - generate-api-docs (if OpenAPI spec present)
-   - add-dependency (if package manager detected)\
+{skills_section}\
 """,
     )
 
@@ -741,13 +764,16 @@ def build_cursorrules(analysis: dict[str, Any]) -> str:
 
     lines += [
         "## Do not modify",
-        "\n".join(f"- {p}" for p in restricted) if restricted else "<!-- Fill in: paths agents must never modify -->",
+        "\n".join(f"- {p}" for p in restricted) if restricted else "Not determinable from source — fill in agent-context.json static.restricted_write_paths",
         "",
     ]
 
-    if domain_concepts:
-        concept_lines = [f"- {c['term']}: {c['definition']}" for c in domain_concepts if isinstance(c, dict)]
-        lines += ["## Domain concepts", "\n".join(concept_lines), ""]
+    concept_lines = [f"- {c['term']}: {c['definition']}" for c in domain_concepts if isinstance(c, dict)]
+    lines += [
+        "## Domain concepts",
+        "\n".join(concept_lines) if concept_lines else "Not determinable from source — fill in agent-context.json static.domain_concepts",
+        "",
+    ]
 
     return "\n".join(lines)
 
@@ -768,15 +794,25 @@ def detect_skills(analysis: dict[str, Any]) -> list[str]:
     skills.append("run-tests")
     skills.append("build")
 
-    frameworks_lower = {f.lower() for f in analysis.get("frameworks", [])}
-    build_sys = analysis.get("build_system", "").lower()
+    raw_frameworks = analysis.get("frameworks") or []
+    frameworks_lower = {f.lower() for f in raw_frameworks if isinstance(f, str)}
+    raw_build_sys = analysis.get("build_system", "")
+    build_sys = str(raw_build_sys).lower() if raw_build_sys else ""
 
     # Linter
     if frameworks_lower & _LINTERS:
         skills.append("lint")
 
-    # Docker
-    if _DOCKER_SIGNALS & frameworks_lower or _DOCKER_SIGNALS & {build_sys}:
+    # Docker — check specific config file names, not broad substring matching
+    docker_config_files = {"docker-compose.yml", "docker-compose.yaml", "Dockerfile"}
+    file_tree = set(analysis.get("file_tree") or [])
+    config_file_keys = set((analysis.get("config_files") or {}).keys())
+    has_docker = bool(
+        docker_config_files & file_tree
+        or docker_config_files & config_file_keys
+        or {"docker", "docker-compose"} & frameworks_lower
+    )
+    if has_docker:
         skills.append("start-local")
 
     # Migration framework
@@ -828,7 +864,7 @@ A skill file is a self-contained instruction set for a specific repo action,
 used by Claude Code as a slash-command reference.
 
 Repository analysis:
-{_analysis_block(analysis)}
+{_compact_analysis_for_prompt(analysis)}
 
 The skill name is: {skill_name}
 The skill description is: {desc}
@@ -896,8 +932,26 @@ _HOOK_TRIGGERS = {
 }
 
 
-def generate_hook_file(model: str, hook_name: str, analysis: dict[str, Any]) -> str:
+def generate_hook_file(
+    model: str,
+    hook_name: str,
+    analysis: dict[str, Any],
+    generated_files: set[str] | None = None,
+) -> str:
     trigger = _HOOK_TRIGGERS.get(hook_name, f"When {hook_name} event fires")
+    generated_files = generated_files or set()
+
+    context_note = (
+        "Load current state from agent-context.json"
+        if "agent-context.json" in generated_files
+        else "agent-context.json not yet generated — run AgentReady first to generate it"
+    )
+    memory_note = (
+        "Check memory/schema.md for session state contract"
+        if "memory/schema.md" in generated_files
+        else "memory/schema.md not yet generated — run AgentReady first to generate it"
+    )
+
     return _call(
         model,
         f"""\
@@ -906,10 +960,14 @@ Generate a hook file named '{hook_name}' for this repository.
 A hook file defines actions Claude Code takes at a specific lifecycle point.
 
 Repository analysis:
-{_analysis_block(analysis)}
+{_compact_analysis_for_prompt(analysis)}
 
 The hook name is: {hook_name}
 The trigger is: {trigger}
+
+Context availability:
+- agent-context.json: {context_note}
+- memory/schema.md: {memory_note}
 
 Write the file using EXACTLY this structure — no deviations:
 
@@ -942,6 +1000,7 @@ RULES:
 - For 'post-test': always reference the test_command from the analysis.
 - For 'pre-commit': always reference the linter command from the analysis.
 - Include "AGENT_SKIP_HOOKS=true environment variable is set" as one skipped-when condition.
+- Only reference agent-context.json or memory/schema.md if the context availability above confirms they exist.
 - Output only the file content — no preamble, no explanation.\
 """,
         max_tokens=800,
@@ -1090,20 +1149,27 @@ class LLMGenerator:
         for skill_name in skill_names:
             if not self.quiet:
                 print(f"  ✍️  Generating skills/{skill_name}.md...")
-            self._write(
-                f"skills/{skill_name}.md",
-                generate_skill_file(self.model, skill_name, self.analysis),
-            )
+            try:
+                content = generate_skill_file(self.model, skill_name, self.analysis)
+                self._write(f"skills/{skill_name}.md", content)
+            except Exception as e:
+                if not self.quiet:
+                    print(f"  ⚠️  Failed to generate skills/{skill_name}.md: {e}. Skipping.")
+                self.generated.append((f"skills/{skill_name}.md", "⚠️  Skipped (error)"))
 
     def _hooks(self) -> None:
         hook_names = detect_hooks(self.analysis)
+        generated_paths = {path for path, _ in self.generated}
         for hook_name in hook_names:
             if not self.quiet:
                 print(f"  ✍️  Generating hooks/{hook_name}.md...")
-            self._write(
-                f"hooks/{hook_name}.md",
-                generate_hook_file(self.model, hook_name, self.analysis),
-            )
+            try:
+                content = generate_hook_file(self.model, hook_name, self.analysis, generated_paths)
+                self._write(f"hooks/{hook_name}.md", content)
+            except Exception as e:
+                if not self.quiet:
+                    print(f"  ⚠️  Failed to generate hooks/{hook_name}.md: {e}. Skipping.")
+                self.generated.append((f"hooks/{hook_name}.md", "⚠️  Skipped (error)"))
 
     def _copilot_instructions(self) -> None:
         if not self.quiet:

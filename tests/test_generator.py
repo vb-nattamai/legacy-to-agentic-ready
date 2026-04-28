@@ -482,3 +482,116 @@ def test_llm_generator_cursorrules_writes_file(tmp_path: Path) -> None:
     assert (tmp_path / ".cursorrules").exists()
     content = (tmp_path / ".cursorrules").read_text()
     assert "agent-ready" in content
+
+
+# ── edge case / hardening tests ───────────────────────────────────────────────
+
+
+def test_build_cursorrules_empty_analysis_no_silent_blanks() -> None:
+    """build_cursorrules must not silently produce empty sections."""
+    result = build_cursorrules({})
+    assert "Not determinable from source" in result
+
+
+def test_build_cursorrules_missing_restricted_paths_uses_fallback() -> None:
+    """Restricted paths section uses explicit fallback when field is absent."""
+    result = build_cursorrules({"project_name": "x"})
+    assert "Not determinable from source" in result
+
+
+def test_build_cursorrules_missing_domain_concepts_uses_fallback() -> None:
+    """Domain concepts section uses explicit fallback when field is absent."""
+    result = build_cursorrules({})
+    assert "Not determinable from source" in result
+
+
+def test_detect_skills_unexpected_field_types_does_not_crash() -> None:
+    """detect_skills must not crash when analysis fields have unexpected types."""
+    analysis = {
+        "test_command": None,
+        "build_system": 42,
+        "frameworks": None,
+        "file_tree": None,
+        "config_files": None,
+    }
+    result = detect_skills(analysis)
+    assert "run-tests" in result
+    assert "build" in result
+
+
+def test_detect_skills_docker_in_file_tree_adds_start_local() -> None:
+    """Docker detection via file_tree."""
+    result = detect_skills({"file_tree": ["Dockerfile", "src/main.py"]})
+    assert "start-local" in result
+
+
+def test_detect_skills_docker_compose_in_config_files_adds_start_local() -> None:
+    """Docker detection via config_files dict keys."""
+    result = detect_skills({"config_files": {"docker-compose.yml": "version: '3'"}})
+    assert "start-local" in result
+
+
+def test_skills_generation_failure_does_not_crash_pipeline(tmp_path: Path) -> None:
+    """A single skill LLM failure must not crash the pipeline."""
+    call_results = [Exception("LLM timeout"), "# build skill content"]
+
+    def side_effect(*args: object, **kwargs: object) -> str:
+        result = call_results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return str(result)
+
+    with patch("agent_ready.generator._call", side_effect=side_effect):
+        gen = generator.LLMGenerator(
+            target=tmp_path,
+            analysis=_analysis_payload(),
+            generation_model="test-model",
+            quiet=True,
+        )
+        gen._skills()  # must not raise
+
+    paths = [p for p, _ in gen.generated]
+    # build.md succeeded; run-tests.md was skipped with a warning entry
+    assert "skills/build.md" in paths
+    assert any("run-tests" in p for p in paths)
+
+
+def test_hooks_generation_failure_does_not_crash_pipeline(tmp_path: Path) -> None:
+    """A single hook LLM failure must not crash the pipeline."""
+    call_results = [Exception("LLM timeout"), "# pre-tool-call content"]
+
+    def side_effect(*args: object, **kwargs: object) -> str:
+        result = call_results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return str(result)
+
+    with patch("agent_ready.generator._call", side_effect=side_effect):
+        gen = generator.LLMGenerator(
+            target=tmp_path,
+            analysis=_analysis_payload(),
+            generation_model="test-model",
+            quiet=True,
+        )
+        gen._hooks()  # must not raise
+
+    paths = [p for p, _ in gen.generated]
+    assert "hooks/pre-tool-call.md" in paths
+
+
+def test_generate_hook_file_references_agent_context_when_present() -> None:
+    """Hook prompt notes agent-context.json is available when in generated_files."""
+    with patch("agent_ready.generator._call", return_value="hook") as mock_call:
+        generator.generate_hook_file(
+            "model", "session-start", {}, generated_files={"agent-context.json"}
+        )
+    prompt = mock_call.call_args[0][1]
+    assert "Load current state from agent-context.json" in prompt
+
+
+def test_generate_hook_file_warns_when_agent_context_missing() -> None:
+    """Hook prompt warns agent-context.json is not generated when absent."""
+    with patch("agent_ready.generator._call", return_value="hook") as mock_call:
+        generator.generate_hook_file("model", "session-start", {}, generated_files=set())
+    prompt = mock_call.call_args[0][1]
+    assert "not yet generated" in prompt
