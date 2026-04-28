@@ -1,4 +1,5 @@
 """Tests for the AgentReady MCP server — helpers and tool logic."""
+
 from __future__ import annotations
 
 import asyncio
@@ -172,8 +173,10 @@ def test_transform_tool_has_description() -> None:
     from agent_ready.mcp_server import mcp
 
     tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-    assert "scaffold" in tools["transform"].description.lower() or \
-           "transform" in tools["transform"].description.lower()
+    assert (
+        "scaffold" in tools["transform"].description.lower()
+        or "transform" in tools["transform"].description.lower()
+    )
 
 
 def test_review_pr_tool_has_description() -> None:

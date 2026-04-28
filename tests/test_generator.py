@@ -219,7 +219,10 @@ def test_is_rest_api_false_for_no_frameworks() -> None:
 
 def test_openapi_stub_is_valid_yaml() -> None:
     import yaml
-    out = build_openapi_stub({"project_name": "test-api", "frameworks": ["fastapi"], "primary_language": "python"})
+
+    out = build_openapi_stub(
+        {"project_name": "test-api", "frameworks": ["fastapi"], "primary_language": "python"}
+    )
     # strip the comment header before parsing
     body = "\n".join(line for line in out.splitlines() if not line.startswith("#"))
     parsed = yaml.safe_load(body)
@@ -232,7 +235,9 @@ def test_openapi_stub_only_generated_for_rest_api(tmp_path: Path) -> None:
     analysis["frameworks"] = ["click"]  # not a REST framework
     analysis["has_openapi"] = False
 
-    gen = generator.LLMGenerator(target=tmp_path, analysis=analysis, generation_model="unused", quiet=True)
+    gen = generator.LLMGenerator(
+        target=tmp_path, analysis=analysis, generation_model="unused", quiet=True
+    )
     # only test the openapi-specific method — avoids LLM calls
     gen._openapi_stub()
     paths = [p for p, _ in gen.generated]
@@ -244,7 +249,9 @@ def test_openapi_stub_skipped_when_already_has_openapi(tmp_path: Path) -> None:
     analysis["frameworks"] = ["flask"]
     analysis["has_openapi"] = True  # already exists
 
-    gen = generator.LLMGenerator(target=tmp_path, analysis=analysis, generation_model="unused", quiet=True)
+    gen = generator.LLMGenerator(
+        target=tmp_path, analysis=analysis, generation_model="unused", quiet=True
+    )
     gen._openapi_stub()
     paths = [p for p, _ in gen.generated]
     assert "openapi.yaml" not in paths
@@ -255,7 +262,13 @@ def test_openapi_stub_skipped_when_already_has_openapi(tmp_path: Path) -> None:
 
 def test_codeowners_includes_key_generated_files() -> None:
     out = build_codeowners({})
-    for filename in ("agent-context.json", "AGENTS.md", "CLAUDE.md", "memory/", ".github/workflows/"):
+    for filename in (
+        "agent-context.json",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "memory/",
+        ".github/workflows/",
+    ):
         assert filename in out, f"Missing {filename} in CODEOWNERS"
 
 

@@ -122,9 +122,7 @@ def test_static_extract_jsonpath(tmp_path: Path) -> None:
     """Extracts test command from package.json via jsonpath."""
     from agent_ready.ground_truth import extract_ground_truth
 
-    (tmp_path / "package.json").write_text(
-        json.dumps({"scripts": {"test": "jest --coverage"}})
-    )
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"test": "jest --coverage"}}))
     q = {
         "id": "test_001",
         "prompt": "test command?",
@@ -272,9 +270,7 @@ def test_run_eval_v2_result_has_new_fields(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
 
     fake_context = tmp_path / "agent-context.json"
-    fake_context.write_text(
-        json.dumps({"primary_language": "python", "static": {}, "dynamic": {}})
-    )
+    fake_context.write_text(json.dumps({"primary_language": "python", "static": {}, "dynamic": {}}))
     (tmp_path / "AGENTS.md").write_text("# Agents")
     (tmp_path / "CLAUDE.md").write_text("# Claude")
 
@@ -314,8 +310,13 @@ def test_run_eval_v2_result_has_new_fields(tmp_path: Path, monkeypatch: pytest.M
 
     with (
         patch("agent_ready.evaluator.load_golden_questions", return_value=fake_questions),
-        patch("agent_ready.ground_truth.extract_all", return_value={"base_cmd_001": "pytest tests/"}),
-        patch("agent_ready.analyser.collect", return_value={"source_files": {}, "primary_language": "python"}),
+        patch(
+            "agent_ready.ground_truth.extract_all", return_value={"base_cmd_001": "pytest tests/"}
+        ),
+        patch(
+            "agent_ready.analyser.collect",
+            return_value={"source_files": {}, "primary_language": "python"},
+        ),
         patch("agent_ready.evaluator._ask", return_value="pytest tests/ -v"),
         patch("agent_ready.evaluator._judge_response", return_value=fake_judgment),
         patch("agent_ready.evaluator._multi_judge_response", return_value=fake_panel),
@@ -350,8 +351,20 @@ def test_run_eval_v2_report_has_methodology(tmp_path: Path) -> None:
                 "passed": True,
                 "delta": 7.0,
                 "ground_truth": "pytest",
-                "baseline": {"score": 2, "reasoning": "ok", "hallucinated": False, "key_missing": ""},
-                "with_context": {"score": 9, "reasoning": "great", "hallucinated": False, "key_missing": "", "panel_vote": "3/3", "panel": []},
+                "baseline": {
+                    "score": 2,
+                    "reasoning": "ok",
+                    "hallucinated": False,
+                    "key_missing": "",
+                },
+                "with_context": {
+                    "score": 9,
+                    "reasoning": "great",
+                    "hallucinated": False,
+                    "key_missing": "",
+                    "panel_vote": "3/3",
+                    "panel": [],
+                },
             }
         ],
         "questions": [],
@@ -362,7 +375,13 @@ def test_run_eval_v2_report_has_methodology(tmp_path: Path) -> None:
         "hallucination_rate": 0.0,
         "question_count": 1,
         "category_breakdown": {
-            "commands": {"baseline_avg": 2.0, "context_avg": 9.0, "delta": 7.0, "pass_rate": 1.0, "question_count": 1}
+            "commands": {
+                "baseline_avg": 2.0,
+                "context_avg": 9.0,
+                "delta": 7.0,
+                "pass_rate": 1.0,
+                "question_count": 1,
+            }
         },
         "passed": True,
         "generated_at": "2026-04-21T08:00:00Z",

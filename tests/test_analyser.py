@@ -52,8 +52,12 @@ def test_collect_excludes_agent_ready_workflows_from_ci_files(tmp_path: Path) ->
     # The app's own CI should be kept
     assert "ci.yml" in ci_filenames, "App's own CI workflow should be included"
     # All agent-ready workflows must be excluded
-    for skipped in ("agentic-ready.yml", "agentic-ready-eval.yml",
-                     "context-drift-detector.yml", "pr-review.yml"):
+    for skipped in (
+        "agentic-ready.yml",
+        "agentic-ready-eval.yml",
+        "context-drift-detector.yml",
+        "pr-review.yml",
+    ):
         assert skipped not in ci_filenames, f"{skipped} should be filtered out of ci_files"
 
 
@@ -72,8 +76,14 @@ def test_collect_excludes_agent_ready_files_from_file_tree(tmp_path: Path) -> No
     tree = collected["file_tree"]
 
     assert "src/app.py" in tree
-    for excluded in ("AGENTS.md", "CLAUDE.md", "agent-context.json", "mcp.json",
-                     "AGENTIC_EVAL.md", ".github/workflows/agentic-ready.yml"):
+    for excluded in (
+        "AGENTS.md",
+        "CLAUDE.md",
+        "agent-context.json",
+        "mcp.json",
+        "AGENTIC_EVAL.md",
+        ".github/workflows/agentic-ready.yml",
+    ):
         assert excluded not in tree, f"{excluded} should be excluded from file_tree"
 
 
