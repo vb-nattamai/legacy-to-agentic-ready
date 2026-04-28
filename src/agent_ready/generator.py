@@ -232,7 +232,19 @@ No generic software engineering advice.
 {_pitfalls_block(analysis)}
 
 7. ## After Every Change
-   Specific checklist including the test command.\
+   Specific checklist including the test command.
+
+8. ## Available Skills
+   List each skill that will be generated in skills/ based on this analysis.
+   Format each entry as: `skills/<name>.md` — <one-line purpose>.
+   Skills to list (generate only those applicable to this repo):
+   - run-tests, build (always)
+   - lint (if linter detected)
+   - start-local (if Docker detected)
+   - run-migrations (if migration framework detected)
+   - run-ci (if CI config present)
+   - generate-api-docs (if OpenAPI spec present)
+   - add-dependency (if package manager detected)\
 """,
     )
 
@@ -456,10 +468,13 @@ def build_codeowners(analysis: dict[str, Any]) -> str:
         "agent-context.json        *",
         "AGENTS.md                 *",
         "CLAUDE.md                 *",
+        ".cursorrules              *",
         "system_prompt.md          *",
         "mcp.json                  *",
         "AGENTIC_EVAL.md           *",
         "memory/                   *",
+        "skills/                   *",
+        "hooks/                    *",
         ".github/copilot-instructions.md  *",
         ".github/workflows/        *",
         "",
@@ -648,6 +663,291 @@ def build_custom_questions_starter(analysis: dict[str, Any]) -> str:
     )
 
 
+# ── .cursorrules ──────────────────────────────────────────────────────────────
+
+
+def build_cursorrules(analysis: dict[str, Any]) -> str:
+    """Generate a .cursorrules file from analysis data.
+
+    Deterministic — no LLM call. Same input always produces the same output.
+    Commands are taken verbatim from analysis; missing values get explicit
+    'Not determinable from source' placeholders rather than invented content.
+    """
+    name = analysis.get("project_name", "this project")
+    desc = analysis.get("description", "")
+    lang = analysis.get("primary_language", "")
+    frameworks = analysis.get("frameworks", [])
+    framework = ", ".join(frameworks) if frameworks else "none detected"
+    build_sys = analysis.get("build_system", "")
+
+    def _cmd(key: str) -> str:
+        val = analysis.get(key, "")
+        if val and val not in ("TODO: verify", ""):
+            return val
+        return "Not determinable from source"
+
+    naming = analysis.get("naming_convention", "")
+    structure = analysis.get("structure_type", "")
+    source_dirs = analysis.get("source_directories", [])
+    test_dir = analysis.get("test_directory", "")
+    entry = analysis.get("entry_point", "")
+    restricted = analysis.get("restricted_write_paths", [])
+    domain_concepts = analysis.get("domain_concepts", [])
+
+    lines = [f"# {name}", ""]
+
+    lines += ["## Project overview", desc or "<!-- Fill in: what this project does for its end users -->", ""]
+
+    lines += [
+        "## Language and framework",
+        f"- Primary language: {lang or 'unknown'}",
+        f"- Framework: {framework}",
+        f"- Build system: {build_sys or 'unknown'}",
+        "",
+    ]
+
+    lines += [
+        "## Critical commands",
+        f"- Install: {_cmd('install_command')}",
+        f"- Build: {_cmd('build_command')}",
+        f"- Test: {_cmd('test_command')}",
+        f"- Run locally: {_cmd('run_command')}",
+        "",
+    ]
+
+    conventions_parts = []
+    if naming:
+        conventions_parts.append(f"Naming: {naming}")
+    if structure:
+        conventions_parts.append(f"Structure: {structure}")
+    if source_dirs:
+        conventions_parts.append(f"Source directories: {', '.join(source_dirs)}")
+    lines += [
+        "## Code conventions",
+        "\n".join(conventions_parts) if conventions_parts else "<!-- Fill in: naming, file structure, patterns -->",
+        "",
+    ]
+
+    dir_lines = []
+    if entry:
+        dir_lines.append(f"- Entry point: {entry}")
+    if test_dir:
+        dir_lines.append(f"- Tests: {test_dir}")
+    lines += [
+        "## Files and directories",
+        "\n".join(dir_lines) if dir_lines else "<!-- Fill in: key file locations -->",
+        "",
+    ]
+
+    lines += [
+        "## Do not modify",
+        "\n".join(f"- {p}" for p in restricted) if restricted else "<!-- Fill in: paths agents must never modify -->",
+        "",
+    ]
+
+    if domain_concepts:
+        concept_lines = [f"- {c['term']}: {c['definition']}" for c in domain_concepts if isinstance(c, dict)]
+        lines += ["## Domain concepts", "\n".join(concept_lines), ""]
+
+    return "\n".join(lines)
+
+
+# ── skills/ ───────────────────────────────────────────────────────────────────
+
+_LINTERS = {"ruff", "eslint", "checkstyle", "pylint", "flake8", "rubocop", "golangci-lint", "clippy"}
+_MIGRATION_FRAMEWORKS = {"flyway", "alembic", "liquibase", "migrate", "knex"}
+_DOCKER_SIGNALS = {"docker", "docker-compose"}
+_PACKAGE_MANAGERS = {"pip", "npm", "yarn", "gradle", "maven", "cargo", "bundler", "go"}
+
+
+def detect_skills(analysis: dict[str, Any]) -> list[str]:
+    """Return list of skill names to generate based on repo signals."""
+    skills: list[str] = []
+
+    # Always generate these two
+    skills.append("run-tests")
+    skills.append("build")
+
+    frameworks_lower = {f.lower() for f in analysis.get("frameworks", [])}
+    build_sys = analysis.get("build_system", "").lower()
+
+    # Linter
+    if frameworks_lower & _LINTERS:
+        skills.append("lint")
+
+    # Docker
+    if _DOCKER_SIGNALS & frameworks_lower or _DOCKER_SIGNALS & {build_sys}:
+        skills.append("start-local")
+
+    # Migration framework
+    if frameworks_lower & _MIGRATION_FRAMEWORKS:
+        skills.append("run-migrations")
+
+    # CI
+    if analysis.get("has_ci", False):
+        skills.append("run-ci")
+
+    # OpenAPI
+    if analysis.get("has_openapi", False):
+        skills.append("generate-api-docs")
+
+    # Package manager
+    if build_sys in _PACKAGE_MANAGERS:
+        skills.append("add-dependency")
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for s in skills:
+        if s not in seen:
+            seen.add(s)
+            result.append(s)
+    return result
+
+
+_SKILL_DESCRIPTIONS = {
+    "run-tests": "Run the full test suite with project-configured settings.",
+    "build": "Build the project artifacts.",
+    "lint": "Run the linter and fix reported issues.",
+    "start-local": "Start the application locally using Docker.",
+    "run-migrations": "Apply pending database migrations.",
+    "run-ci": "Trigger or simulate the CI pipeline.",
+    "generate-api-docs": "Generate or update API documentation from the OpenAPI spec.",
+    "add-dependency": "Add a new dependency to the project.",
+}
+
+
+def generate_skill_file(model: str, skill_name: str, analysis: dict[str, Any]) -> str:
+    desc = _SKILL_DESCRIPTIONS.get(skill_name, f"Execute the {skill_name} workflow.")
+    return _call(
+        model,
+        f"""\
+Generate a skill file named '{skill_name}' for this repository.
+
+A skill file is a self-contained instruction set for a specific repo action,
+used by Claude Code as a slash-command reference.
+
+Repository analysis:
+{_analysis_block(analysis)}
+
+The skill name is: {skill_name}
+The skill description is: {desc}
+
+Write the file using EXACTLY this structure — no deviations:
+
+---
+name: {skill_name}
+description: {desc}
+---
+
+## When to use this skill
+
+<One sentence trigger condition.>
+
+## Steps
+
+1. <First step — use the EXACT command from the analysis above if available>
+2. <Second step>
+3. <Validation step — how to confirm success>
+
+## Expected output
+
+<What a successful run looks like. Be specific.>
+
+## Common failures
+
+- **<Failure condition>**: <How to recover>
+- **<Failure condition>**: <How to recover>
+
+RULES:
+- Commands MUST come from the analysis JSON above (test_command, build_command, install_command, run_command, etc.).
+- If a command cannot be determined, write: "Command not determinable from source — check your project's documentation."
+- Do NOT invent commands. Do NOT use generic placeholders like "npm run build" unless that is the actual command in the analysis.
+- Omit the "## Notes" section unless there is a specific project caveat from the analysis worth flagging.
+- Output only the file content — no preamble, no explanation.\
+""",
+        max_tokens=1000,
+    )
+
+
+# ── hooks/ ────────────────────────────────────────────────────────────────────
+
+
+def detect_hooks(analysis: dict[str, Any]) -> list[str]:
+    """Return list of hook names to generate based on repo signals."""
+    hooks: list[str] = ["session-start", "pre-tool-call"]
+
+    test_cmd = analysis.get("test_command", "")
+    if test_cmd and test_cmd not in ("TODO: verify", "TODO: no test suite detected — add tests first"):
+        hooks.append("post-test")
+
+    frameworks_lower = {f.lower() for f in analysis.get("frameworks", [])}
+    if frameworks_lower & _LINTERS:
+        hooks.append("pre-commit")
+
+    return hooks
+
+
+_HOOK_TRIGGERS = {
+    "session-start": "At the start of every Claude Code session",
+    "pre-tool-call": "Before any tool call that writes files",
+    "post-test": "After running the test command",
+    "pre-commit": "Before a git commit",
+}
+
+
+def generate_hook_file(model: str, hook_name: str, analysis: dict[str, Any]) -> str:
+    trigger = _HOOK_TRIGGERS.get(hook_name, f"When {hook_name} event fires")
+    return _call(
+        model,
+        f"""\
+Generate a hook file named '{hook_name}' for this repository.
+
+A hook file defines actions Claude Code takes at a specific lifecycle point.
+
+Repository analysis:
+{_analysis_block(analysis)}
+
+The hook name is: {hook_name}
+The trigger is: {trigger}
+
+Write the file using EXACTLY this structure — no deviations:
+
+---
+name: {hook_name}
+trigger: {trigger}
+---
+
+## Purpose
+
+<One sentence describing what this hook does and why it exists for this specific repo.>
+
+## Actions
+
+1. <Specific action grounded in this repo's configuration>
+2. <Second action>
+
+## Context loaded
+
+<What information this hook makes available to the agent.>
+
+## Skipped when
+
+<Conditions under which this hook should not execute.>
+
+RULES:
+- All actions must be grounded in this specific repo's configuration (commands, paths, restricted_write_paths).
+- Use exact commands from the analysis where relevant.
+- For 'pre-tool-call': always reference restricted_write_paths from the analysis.
+- For 'post-test': always reference the test_command from the analysis.
+- For 'pre-commit': always reference the linter command from the analysis.
+- Include "AGENT_SKIP_HOOKS=true environment variable is set" as one skipped-when condition.
+- Output only the file content — no preamble, no explanation.\
+""",
+        max_tokens=800,
+    )
+
+
 # ── .github/dependabot.yml ────────────────────────────────────────────────────
 
 
@@ -724,10 +1024,13 @@ class LLMGenerator:
         self._agent_context()
         self._agents_md()
         self._claude_md()
+        self._cursorrules()
         self._copilot_instructions()
         self._system_prompt()
         self._mcp_json()
         self._memory_schema()
+        self._skills()
+        self._hooks()
         self._refresh_context_script()
         self._dependabot_yml()
         self._custom_questions_starter()
@@ -778,6 +1081,29 @@ class LLMGenerator:
         if not self.quiet:
             print("  ✍️  Generating CLAUDE.md...")
         self._write("CLAUDE.md", generate_claude_md(self.model, self.analysis))
+
+    def _cursorrules(self) -> None:
+        self._write(".cursorrules", build_cursorrules(self.analysis))
+
+    def _skills(self) -> None:
+        skill_names = detect_skills(self.analysis)
+        for skill_name in skill_names:
+            if not self.quiet:
+                print(f"  ✍️  Generating skills/{skill_name}.md...")
+            self._write(
+                f"skills/{skill_name}.md",
+                generate_skill_file(self.model, skill_name, self.analysis),
+            )
+
+    def _hooks(self) -> None:
+        hook_names = detect_hooks(self.analysis)
+        for hook_name in hook_names:
+            if not self.quiet:
+                print(f"  ✍️  Generating hooks/{hook_name}.md...")
+            self._write(
+                f"hooks/{hook_name}.md",
+                generate_hook_file(self.model, hook_name, self.analysis),
+            )
 
     def _copilot_instructions(self) -> None:
         if not self.quiet:

@@ -8,14 +8,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from unittest.mock import patch
+
 from agent_ready import generator
 from agent_ready.generator import (
     _is_rest_api,
     build_codeowners,
+    build_cursorrules,
     build_custom_questions_starter,
     build_dependabot_yml,
     build_openapi_stub,
     build_refresh_context_script,
+    detect_hooks,
+    detect_skills,
 )
 
 
@@ -280,3 +285,200 @@ def test_codeowners_includes_restricted_paths() -> None:
 def test_codeowners_is_not_empty() -> None:
     out = build_codeowners(_analysis_payload())
     assert len(out.strip()) > 0
+
+
+def test_codeowners_includes_new_artifacts() -> None:
+    out = build_codeowners({})
+    for entry in (".cursorrules", "skills/", "hooks/"):
+        assert entry in out, f"Missing {entry} in CODEOWNERS"
+
+
+# ── build_cursorrules ─────────────────────────────────────────────────────────
+
+
+def test_build_cursorrules_uses_analysis_data() -> None:
+    analysis = _analysis_payload()
+    out = build_cursorrules(analysis)
+    assert "agent-ready" in out
+    assert "Python" in out
+    assert "pytest -q" in out
+    assert "pip install -e ." in out
+
+
+def test_build_cursorrules_missing_commands_use_fallback() -> None:
+    out = build_cursorrules({"project_name": "empty-repo"})
+    assert "Not determinable from source" in out
+
+
+def test_build_cursorrules_todo_verify_uses_fallback() -> None:
+    out = build_cursorrules({"test_command": "TODO: verify", "project_name": "x"})
+    assert "Not determinable from source" in out
+
+
+def test_build_cursorrules_includes_restricted_paths() -> None:
+    out = build_cursorrules({"restricted_write_paths": [".github/workflows/release.yml"]})
+    assert ".github/workflows/release.yml" in out
+
+
+def test_build_cursorrules_includes_domain_concepts() -> None:
+    out = build_cursorrules(
+        {"domain_concepts": [{"term": "Scaffold", "definition": "Generated context files"}]}
+    )
+    assert "Scaffold" in out
+
+
+def test_build_cursorrules_is_idempotent() -> None:
+    analysis = _analysis_payload()
+    assert build_cursorrules(analysis) == build_cursorrules(analysis)
+
+
+# ── detect_skills ─────────────────────────────────────────────────────────────
+
+
+def test_detect_skills_always_includes_run_tests_and_build() -> None:
+    skills = detect_skills({})
+    assert "run-tests" in skills
+    assert "build" in skills
+
+
+def test_detect_skills_linter_adds_lint_skill() -> None:
+    skills = detect_skills({"frameworks": ["ruff"]})
+    assert "lint" in skills
+
+
+def test_detect_skills_eslint_adds_lint_skill() -> None:
+    skills = detect_skills({"frameworks": ["eslint", "react"]})
+    assert "lint" in skills
+
+
+def test_detect_skills_docker_in_frameworks_adds_start_local() -> None:
+    skills = detect_skills({"frameworks": ["docker", "fastapi"]})
+    assert "start-local" in skills
+
+
+def test_detect_skills_has_ci_adds_run_ci() -> None:
+    skills = detect_skills({"has_ci": True})
+    assert "run-ci" in skills
+
+
+def test_detect_skills_has_openapi_adds_generate_api_docs() -> None:
+    skills = detect_skills({"has_openapi": True})
+    assert "generate-api-docs" in skills
+
+
+def test_detect_skills_pip_build_system_adds_add_dependency() -> None:
+    skills = detect_skills({"build_system": "pip"})
+    assert "add-dependency" in skills
+
+
+def test_detect_skills_alembic_adds_run_migrations() -> None:
+    skills = detect_skills({"frameworks": ["alembic", "sqlalchemy"]})
+    assert "run-migrations" in skills
+
+
+def test_detect_skills_no_duplicates() -> None:
+    skills = detect_skills({"frameworks": ["ruff", "ruff"]})
+    assert skills.count("lint") == 1
+
+
+def test_detect_skills_empty_analysis_returns_minimum() -> None:
+    skills = detect_skills({})
+    assert skills == ["run-tests", "build"]
+
+
+# ── detect_hooks ──────────────────────────────────────────────────────────────
+
+
+def test_detect_hooks_always_includes_session_start_and_pre_tool_call() -> None:
+    hooks = detect_hooks({})
+    assert "session-start" in hooks
+    assert "pre-tool-call" in hooks
+
+
+def test_detect_hooks_test_command_adds_post_test() -> None:
+    hooks = detect_hooks({"test_command": "pytest -q"})
+    assert "post-test" in hooks
+
+
+def test_detect_hooks_todo_test_command_excludes_post_test() -> None:
+    hooks = detect_hooks({"test_command": "TODO: verify"})
+    assert "post-test" not in hooks
+
+
+def test_detect_hooks_no_test_excludes_post_test() -> None:
+    hooks = detect_hooks({})
+    assert "post-test" not in hooks
+
+
+def test_detect_hooks_linter_adds_pre_commit() -> None:
+    hooks = detect_hooks({"frameworks": ["ruff"]})
+    assert "pre-commit" in hooks
+
+
+def test_detect_hooks_no_linter_excludes_pre_commit() -> None:
+    hooks = detect_hooks({"frameworks": ["pytest"]})
+    assert "pre-commit" not in hooks
+
+
+# ── generate_skill_file / generate_hook_file (mock _call) ────────────────────
+
+
+def test_generate_skill_file_calls_llm_with_skill_name() -> None:
+    with patch("agent_ready.generator._call", return_value="skill content") as mock_call:
+        result = generator.generate_skill_file("test-model", "run-tests", _analysis_payload())
+    assert result == "skill content"
+    mock_call.assert_called_once()
+    prompt_arg = mock_call.call_args[0][1]
+    assert "run-tests" in prompt_arg
+
+
+def test_generate_hook_file_calls_llm_with_hook_name() -> None:
+    with patch("agent_ready.generator._call", return_value="hook content") as mock_call:
+        result = generator.generate_hook_file("test-model", "session-start", _analysis_payload())
+    assert result == "hook content"
+    mock_call.assert_called_once()
+    prompt_arg = mock_call.call_args[0][1]
+    assert "session-start" in prompt_arg
+
+
+def test_llm_generator_skills_writes_files(tmp_path: Path) -> None:
+    with patch("agent_ready.generator._call", return_value="# skill"):
+        gen = generator.LLMGenerator(
+            target=tmp_path,
+            analysis=_analysis_payload(),
+            generation_model="test-model",
+            quiet=True,
+        )
+        gen._skills()
+    skills_dir = tmp_path / "skills"
+    assert skills_dir.is_dir()
+    assert (skills_dir / "run-tests.md").exists()
+    assert (skills_dir / "build.md").exists()
+
+
+def test_llm_generator_hooks_writes_files(tmp_path: Path) -> None:
+    with patch("agent_ready.generator._call", return_value="# hook"):
+        gen = generator.LLMGenerator(
+            target=tmp_path,
+            analysis=_analysis_payload(),
+            generation_model="test-model",
+            quiet=True,
+        )
+        gen._hooks()
+    hooks_dir = tmp_path / "hooks"
+    assert hooks_dir.is_dir()
+    assert (hooks_dir / "session-start.md").exists()
+    assert (hooks_dir / "pre-tool-call.md").exists()
+
+
+def test_llm_generator_cursorrules_writes_file(tmp_path: Path) -> None:
+    gen = generator.LLMGenerator(
+        target=tmp_path,
+        analysis=_analysis_payload(),
+        generation_model="unused",
+        quiet=True,
+    )
+    gen._cursorrules()
+    assert (tmp_path / ".cursorrules").exists()
+    content = (tmp_path / ".cursorrules").read_text()
+    assert "agent-ready" in content
