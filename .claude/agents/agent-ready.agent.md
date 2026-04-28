@@ -1,7 +1,7 @@
 # AgentReady Transformer Agent
 
 > **Platform:** Claude Code / Anthropic
-> **Version:** 2.0.0
+> **Version:** 2.8.0
 > **Purpose:** Transform any repository into an AI-agent-ready codebase using LLM-first analysis
 
 ---
@@ -169,7 +169,7 @@ Calculate the 100-point readiness score:
 | OpenAPI spec exists | 5 |
 | CI config exists | 5 |
 
-Write `AGENTIC_READINESS.md` with the full scored breakdown and specific improvement tips.
+Write `AGENTIC_EVAL.md` with the full scored breakdown and specific improvement tips.
 
 Validation checklist before declaring complete:
 1. Every file path referenced in generated files exists on disk or was just created
@@ -207,10 +207,13 @@ After generating all files, present:
     ✅ agent-context.json
     ✅ AGENTS.md
     ✅ CLAUDE.md
+    ✅ .cursorrules
     ✅ system_prompt.md
     ✅ mcp.json
     ✅ memory/schema.md
-    ✅ AGENTIC_READINESS.md
+    ✅ skills/run-tests.md  (+ additional skills based on repo)
+    ✅ hooks/session-start.md  (+ additional hooks based on repo)
+    ✅ AGENTIC_EVAL.md
 
   No existing files were modified.
 

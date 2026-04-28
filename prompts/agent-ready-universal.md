@@ -182,8 +182,11 @@ After generating all files, provide this summary:
 | `agent-context.json` | Machine-readable repo map | ✅ Generated |
 | `AGENTS.md` | Agent operating contract | ✅ Generated |
 | `CLAUDE.md` | Claude Code context | ✅ Generated |
+| `.cursorrules` | Cursor context file | ✅ Generated |
 | `system_prompt.md` | Universal system prompt | ✅ Generated |
 | `memory/schema.md` | Working memory schema | ✅ Generated |
+| `skills/` | Slash-command skill definitions | ✅ Generated |
+| `hooks/` | Session-continuity hooks | ✅ Generated |
 
 Then ask: **"Which area had the most pitfalls — and would you like me to expand the
 domain glossary for any specific component?"**

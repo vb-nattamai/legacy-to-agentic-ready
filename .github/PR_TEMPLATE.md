@@ -8,10 +8,13 @@ This PR was generated automatically by [AgentReady](https://github.com/vb-nattam
 |------|---------|
 | `CLAUDE.md` | Persistent context for Claude Code — read at every session start |
 | `AGENTS.md` | Agent contract: safe ops, forbidden ops, domain glossary |
+| `.cursorrules` | Persistent context for Cursor — read at project open |
 | `agent-context.json` | Machine-readable repo map for all platforms |
 | `system_prompt.md` | Universal system prompt — works with any LLM |
 | `mcp.json` | MCP server configuration for Claude Code and VS Code |
 | `memory/schema.md` | Agent working memory and state contract |
+| `skills/` | Slash-command skill definitions grounded in repo commands |
+| `hooks/` | Claude Code lifecycle hooks for session continuity |
 | `AGENTIC_EVAL.md` | Eval report — baseline vs. context scores (if eval was enabled) |
 
 ### Before merging

@@ -98,10 +98,11 @@ Label added to issue
     │      — reads source files, config, CI, README
     │      — extracts domain concepts, entry points, env vars, pitfalls
     ├─ 4. Generation model writes all scaffolding files from scratch
-    │      — AGENTS.md, CLAUDE.md, agent-context.json
+    │      — AGENTS.md, CLAUDE.md, .cursorrules, agent-context.json
     │      — system_prompt.md, mcp.json, memory/schema.md
+    │      — skills/ (run-tests, build, lint, etc.), hooks/ (session-start, pre-tool-call, etc.)
     ├─ 5. Evaluation model measures whether context files improve AI responses
-    │      — 15 questions, with and without context
+    │      — 19 questions, with and without context
     │      — saves AGENTIC_EVAL.md with per-question results
     ├─ 6. Opens a PR: "🤖 Add agentic-ready scaffolding"
     ├─ 7. Comments on the issue with the PR link
@@ -117,9 +118,12 @@ Label added to issue
 | `agent-context.json` | Machine-readable repo map — static section (edit once) + dynamic section (auto-refreshed) |
 | `AGENTS.md` | Operating contract for GitHub Copilot and OpenAI agents |
 | `CLAUDE.md` | Auto-loaded by Claude Code at every session start |
+| `.cursorrules` | Auto-loaded by Cursor at project open |
 | `system_prompt.md` | Paste as the `system` parameter in any LLM interface |
 | `mcp.json` | MCP server configuration |
 | `memory/schema.md` | Agent working memory schema |
+| `skills/` | Slash-command skill definitions grounded in repo commands (run-tests, build, lint, etc.) |
+| `hooks/` | Claude Code lifecycle hooks for session continuity (session-start, pre-tool-call, etc.) |
 | `AGENTIC_EVAL.md` | Eval report — baseline vs with-context scores per category |
 
 ---

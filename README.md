@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-2.7.0-green.svg)](https://github.com/vb-nattamai/agent-ready/releases)
+[![Version](https://img.shields.io/badge/version-2.8.0-green.svg)](https://github.com/vb-nattamai/agent-ready/releases)
 
 ---
 
@@ -42,15 +42,21 @@ AgentReady addresses this at the source. It analyses a repository's structure, s
 
 ## How It Works
 
-AgentReady operates as a three-stage pipeline:
+AgentReady operates as a five-phase pipeline:
 
-**Stage 1: Analysis**
-The analysis model reads the repository in full — source files, configuration, CI pipelines, README, and build definitions. It extracts domain concepts, entry points, environment variables, module layout, and known operational pitfalls specific to the codebase.
+**Phase 1: Collect**
+Mechanically reads the file tree, source files, configuration, CI pipelines, README, and build definitions. No LLM involved — pure file I/O.
 
-**Stage 2: Generation**
-The generation model produces all scaffolding files from scratch based on the analysis output. No templates are filled in. Files are written for each supported agent platform.
+**Phase 2: Analyse**
+The analysis model reads the collected files and extracts domain concepts, entry points, environment variables, module layout, and known operational pitfalls specific to the codebase.
 
-**Stage 3: Evaluation**
+**Phase 3: Generate**
+The generation model produces all scaffolding files from scratch based on the analysis output. No templates are filled in. Files are written for each supported agent platform, including the new `skills/`, `hooks/`, and `.cursorrules` artifacts.
+
+**Phase 4: Score**
+Computes a 100-point agentic readiness score based on which structured context criteria are satisfied.
+
+**Phase 5: Evaluate**
 The evaluation model runs 19 structured questions across five categories against the repository, comparing responses with and without the generated context files. Ground truth is derived from raw source code, not from the generated files, eliminating circularity. Results are written to `AGENTIC_EVAL.md` and surfaced in the pull request.
 
 The output is a pull request containing all generated files and a quantified eval report.
@@ -63,10 +69,13 @@ The output is a pull request containing all generated files and a quantified eva
 |---|---|
 | `AGENTS.md` | Operating contract for GitHub Copilot and OpenAI agents — defines safe operations, forbidden operations, and domain glossary |
 | `CLAUDE.md` | Automatically loaded by Claude Code at session start — includes module layout, conventions, and critical commands |
+| `.cursorrules` | Automatically loaded by Cursor at project open — equivalent to `CLAUDE.md` for Cursor users |
 | `system_prompt.md` | Universal system prompt compatible with any LLM interface |
 | `agent-context.json` | Machine-readable repository map with static and dynamic sections |
 | `mcp.json` | MCP server configuration for Claude and MCP-compatible clients |
 | `memory/schema.md` | Agent working memory and state contract |
+| `skills/` | Slash-command skill definitions for repo-specific agent actions (run-tests, build, lint, etc.) |
+| `hooks/` | Session-continuity hooks for Claude Code (session-start, pre-tool-call, post-test, pre-commit) |
 | `AGENTIC_EVAL.md` | Evaluation report showing baseline and with-context scores per category |
 
 ---
@@ -152,9 +161,13 @@ export TOGETHER_API_KEY="..."
 ## CLI Reference
 
 ```bash
+# Install (with LLM support)
+pip install "git+https://github.com/vb-nattamai/agent-ready.git[ai]"
+
+# Or install from source for development
 git clone https://github.com/vb-nattamai/agent-ready.git
 cd agent-ready
-pip install -r requirements.txt
+pip install -e '.[dev]'
 ```
 
 | Command | Description |
@@ -163,7 +176,8 @@ pip install -r requirements.txt
 | `agent-ready --target /path/to/repo --dry-run` | Preview generated files without writing |
 | `agent-ready --target /path/to/repo --only context --force` | Regenerate context map only |
 | `agent-ready --target /path/to/repo --only agents` | Regenerate agent instruction files only |
-| `agent-ready --target /path/to/repo --eval false` | Skip evaluation step |
+| `agent-ready --target /path/to/repo --eval` | Run evaluation after transformation |
+| `agent-ready --target /path/to/repo --eval-only` | Run evaluation against existing files only |
 | `agent-ready --target /path/to/repo --review-pr 42` | Run PR review agent against PR number 42 |
 | `agent-ready --target /path/to/repo --quiet` | Suppress output for CI pipelines |
 
