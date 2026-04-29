@@ -1,0 +1,27 @@
+# Auto-generated stub by AgentReady — fill in your actual paths and schemas.
+# Run: npx @redocly/cli lint openapi.yaml   to validate.
+openapi: 3.1.0
+info:
+  title: hello_world
+  description: "A minimal Flask REST API that provides personalised greetings, records\
+    \ them in memory, and exposes health-check and listing endpoints.\n\n**Auto-generated\
+    \ stub** \u2014 fill in paths, schemas, and security.\nStack: python / Flask"
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: health_check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+components:
+  schemas: {}
+  securitySchemes: {}

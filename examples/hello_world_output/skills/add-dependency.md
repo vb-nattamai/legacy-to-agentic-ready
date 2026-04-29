@@ -5,26 +5,29 @@ description: Add a new dependency to the project.
 
 ## When to use this skill
 
-Use this skill when you need to introduce a new Python package dependency to the Flask project.
+Use this skill when you need to introduce a new third-party package into the project.
 
 ## Steps
 
-1. Add the new package (with an optional version pin) to `requirements.txt`, one package per line (e.g., `requests==2.31.0`).
-2. Install all dependencies, including the newly added one, by running: `pip install -r requirements.txt`
-3. Verify the dependency installed correctly by running `pytest` and confirming the package is importable (e.g., `python -c "import <package_name>"`).
+1. Add the new package name (and optionally a version pin, e.g. `flask==3.0.0`) as a new line in `requirements.txt`.
+   > **Note:** No `requirements.txt` was detected in the file tree during analysis. Confirm the file's location before editing. See *Common failures* below.
+2. Install all dependencies (including the newly added one) by running the install command exactly as specified:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Verify the dependency is installed and the project still works by running the test command:
+   ```
+   pytest
+   ```
 
 ## Expected output
 
-- `pip install -r requirements.txt` completes with no errors and prints a line such as `Successfully installed <package-name>-<version>`.
-- `pytest` passes with the same results as before the addition (no new failures introduced by the dependency).
-- The new package name appears when running `pip show <package_name>`.
+- `pip install -r requirements.txt` completes without errors and reports `Successfully installed <package-name>` (or `Requirement already satisfied` for previously installed packages).
+- `pytest` exits with all tests passing and no import errors related to the new or existing packages.
 
 ## Common failures
 
-- **Package not found on PyPI**: Double-check the package name spelling in `requirements.txt`; use `pip search <name>` or browse [pypi.org](https://pypi.org) to confirm the correct name.
-- **Version conflict with existing dependencies**: Review the conflict message printed by pip, adjust the version pin in `requirements.txt` to a compatible range, and re-run `pip install -r requirements.txt`.
-- **`requirements.txt` not found**: The repository scaffolding may not yet include the original Flask application files — verify the file exists at the repo root before editing; see the note about missing source files in the project analysis.
-
-## Notes
-
-The repository as analyzed contains only generated AgentReady scaffolding and documentation — the actual `requirements.txt` and Flask application source files may not be present in the visible file tree. Confirm that `requirements.txt` exists at the project root before proceeding, and check the project's documentation if it is missing.
+- **`requirements.txt` not found**: The analysis flagged that no `requirements.txt` is visible in the file tree — this repository may be an example output directory rather than the full application source. Locate the actual application source and confirm the path to `requirements.txt` before proceeding.
+- **Package version conflict**: If `pip install -r requirements.txt` reports a dependency conflict, review version pins for the new package and any conflicting existing entries in `requirements.txt`, adjust version constraints, and re-run `pip install -r requirements.txt`.
+- **`pytest` collection errors after install**: If tests fail to collect due to import errors, confirm the package name is spelled correctly in `requirements.txt` and that the install step completed without errors.
+- **Wrong virtual environment active**: If the installed package is not found at runtime, confirm the correct virtual environment is activated before running `pip install -r requirements.txt`.

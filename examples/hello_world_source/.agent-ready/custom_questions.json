@@ -1,0 +1,40 @@
+{
+  "_instructions": "Remove the leading underscore from field names (e.g. '_id' \u2192 'id') to activate a question. All active questions are merged with the AgentReady golden base set on every evaluation run.",
+  "questions": [
+    {
+      "_comment": "Add project-specific eval questions here. AgentReady will merge these with the golden base set on every eval run. Remove the leading underscore from 'id' etc. to activate a question.",
+      "_id": "custom_python_001",
+      "_version": "1.0",
+      "_category": "commands",
+      "_difficulty": "medium",
+      "_prompt": "How do you start hello_world in development mode?",
+      "_pass_threshold": 7,
+      "_ground_truth_extraction": {
+        "method": "static_then_llm",
+        "static_sources": [
+          {
+            "type": "jsonpath",
+            "file": "agent-context.json",
+            "path": "$.static.run_command"
+          }
+        ],
+        "llm_prompt": "What is the command to start hello_world locally? Read app.py."
+      },
+      "_evaluation_criteria": "Must include the exact run command for hello_world."
+    },
+    {
+      "_comment": "Second example \u2014 domain-specific question",
+      "_id": "custom_domain_001",
+      "_version": "1.0",
+      "_category": "domain",
+      "_difficulty": "hard",
+      "_prompt": "What happens to data when the application restarts?",
+      "_pass_threshold": 8,
+      "_ground_truth_extraction": {
+        "method": "llm",
+        "llm_prompt": "Does this application persist data across restarts? Read all source files carefully."
+      },
+      "_evaluation_criteria": "Must accurately describe the persistence (or lack of) behaviour."
+    }
+  ]
+}

@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from agent_ready.generator import _usage_totals
+
 # ── Static extractors ─────────────────────────────────────────────────────────
 
 
@@ -188,6 +190,24 @@ def _llm_extract(
             max_tokens=300,
             temperature=0,
         )
+        if hasattr(resp, "usage") and resp.usage is not None:
+            if baseline_model not in _usage_totals["by_model"]:
+                _usage_totals["by_model"][baseline_model] = {"input": 0, "output": 0}
+            in_toks = (
+                getattr(resp.usage, "input_tokens", None)
+                or getattr(resp.usage, "prompt_tokens", 0)
+                or 0
+            )
+            out_toks = (
+                getattr(resp.usage, "output_tokens", None)
+                or getattr(resp.usage, "completion_tokens", 0)
+                or 0
+            )
+            _usage_totals["input_tokens"] += in_toks
+            _usage_totals["output_tokens"] += out_toks
+            _usage_totals["calls"] += 1
+            _usage_totals["by_model"][baseline_model]["input"] += in_toks
+            _usage_totals["by_model"][baseline_model]["output"] += out_toks
         return resp.choices[0].message.content.strip()
     except Exception as e:
         return f"Extraction failed: {e}"

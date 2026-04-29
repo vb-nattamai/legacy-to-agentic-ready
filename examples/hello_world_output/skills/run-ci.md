@@ -5,31 +5,24 @@ description: Trigger or simulate the CI pipeline.
 
 ## When to use this skill
 
-Use this skill when you need to validate the project locally by running the full install, build, and test sequence as it would execute in CI.
+Use this skill when you need to simulate or trigger the CI pipeline locally to verify that dependencies install and tests pass.
 
 ## Steps
 
 1. Install dependencies: `pip install -r requirements.txt`
 2. Run the test suite: `pytest`
-3. Confirm all tests pass by reviewing the final pytest summary line (e.g., `X passed in Xs`)
+3. Confirm all tests pass with no errors by reviewing the pytest output summary at the end of the run.
 
 ## Expected output
 
-A successful run produces output similar to:
-
-```
-collected X items
-
-tests/test_*.py ....                          [100%]
-
-============================== X passed in 0.XXs ==============================
-```
-
-No errors, no failures, and no warnings that halt execution.
+A successful run produces a pytest summary line indicating all collected tests passed (e.g., `X passed in Xs`), with no errors or failures reported. The dependency installation step should complete without package resolution errors.
 
 ## Common failures
 
-- **Missing `requirements.txt`**: The file tree did not confirm the presence of `requirements.txt` — if `pip install -r requirements.txt` fails, verify the file exists at the repository root and check the project's documentation for the correct dependency file name.
-- **No tests discovered by pytest**: If pytest reports `no tests ran`, the test directory location is unconfirmed (`TODO: verify` in analysis) — locate the test files manually and run `pytest <test_directory>` explicitly.
-- **Swap file conflict on `.openapi.yaml`**: A `.openapi.yaml.swp` file exists, indicating an interrupted edit — resolve or remove the swap file before running any step that parses the OpenAPI spec to avoid stale or corrupt data.
-- **`app.py` or entry point not found**: The application source files were not confirmed in the file tree — if tests import the Flask app and fail with `ModuleNotFoundError`, verify the entry point location before re-running `pytest`.
+- **`requirements.txt` not found**: The analysis notes that no `requirements.txt` is visible in the file tree. This file may be absent or located at an unverified path. Check the repository root and consult project documentation before running the install command.
+- **No tests collected by pytest**: The test directory is not determinable from source. Locate the test files manually and confirm pytest can discover them, or check for a `pytest.ini`, `setup.cfg`, or `pyproject.toml` that configures the test path.
+- **Import errors during test run**: Application source files are noted as potentially absent from this repository (this may be an example output directory). Verify that the actual Flask application code is present before running CI.
+
+## Notes
+
+The analysis flags that this repository may contain only AgentReady-generated artifacts and not the actual Flask application source code. Confirm that application source files and `requirements.txt` are present before attempting to run the CI pipeline.

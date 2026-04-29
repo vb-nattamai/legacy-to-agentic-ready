@@ -5,22 +5,20 @@ trigger: At the start of every Claude Code session
 
 ## Purpose
 
-Initializes session state for the Flask application by loading persisted agent context and verifying the Python environment is ready for development and testing.
+Load persisted project state and session contract at the beginning of each Claude Code session to ensure the agent operates with accurate, up-to-date context for this Flask/Python repository.
 
 ## Actions
 
-1. Load `agent-context.json` to restore the previous session's state, including any in-progress tasks, known issues (such as the `.openapi.yaml.swp` swap file indicating an interrupted edit), and notes about unverified configuration fields (`entry_point`, `test_directory`, `run_command`).
-2. Check `memory/schema.md` to confirm the session state contract, then verify the Python environment by confirming `pip install -r requirements.txt` has been run and that `pytest` is available for testing.
+1. Load `agent-context.json` to retrieve current project state, including any in-progress work, known pitfalls, and static configuration (build command: `pip install -r requirements.txt`, test command: `pytest`).
+2. Read `memory/schema.md` to confirm the session state contract and understand the expected structure of any data written to or read from memory during this session.
 
 ## Context loaded
 
-- Current agent state and task continuity from `agent-context.json`
-- Session state schema and field contracts from `memory/schema.md`
-- Known repository gaps: `entry_point`, `test_directory`, and `run_command` are marked `TODO: verify` and should be resolved early in the session
-- Swap file alert: `.openapi.yaml.swp` may indicate the OpenAPI spec was left in an unsaved state and requires inspection
+- **agent-context.json**: Current agent state including static project metadata (primary language: Python, framework: Flask, build system: pip), any dynamic state from prior sessions, and known pitfalls (e.g., application source files are not present in this repository — this is an example output directory showing AgentReady-generated artifacts only; no `requirements.txt` or `setup.py` is visible in the file tree so dependency information must be inferred from documentation).
+- **memory/schema.md**: The session state contract defining valid memory fields, types, and constraints the agent must honour when reading or writing session state.
 
 ## Skipped when
 
-- `AGENT_SKIP_HOOKS=true` environment variable is set
-- `agent-context.json` does not exist yet (first-time repository setup, no prior session to restore)
-- The Python virtual environment is already confirmed active and `requirements.txt` has not changed since the last session
+- `AGENT_SKIP_HOOKS=true` environment variable is set.
+- `agent-context.json` does not exist at the expected path (hook cannot load state that is not present).
+- `memory/schema.md` does not exist (session state contract is unavailable; agent should flag this condition rather than proceeding silently).

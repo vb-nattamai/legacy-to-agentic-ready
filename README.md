@@ -139,20 +139,20 @@ Every transformation includes a structured evaluation that measures whether the 
 
 ### Observed Results
 
-Results across Python projects ranging from minimal single-file applications to multi-module systems:
+Results from the hello_world example — a minimal Flask REST API with 4 endpoints, pytest tests, pyproject.toml, and CI. Eval design: sonnet vs sonnet baseline, haiku judge.
 
-| Category | Baseline | With Context | Improvement |
-|---|---|---|---|
-| **Overall** | 2.0-2.4 / 10 | 6.3-6.6 / 10 | +4.2-4.3 pts |
-| Domain understanding | 0.0 / 10 | 7.8-9.0 / 10 | +7.8-9.0 pts |
-| Architecture and structure | 1.8-2.2 / 10 | 6.8-7.3 / 10 | +5.0-5.1 pts |
-| Build and run commands | 2.6-3.0 / 10 | 5.5-6.7 / 10 | +2.9-3.7 pts |
-| Safety and restricted paths | 2.5-2.8 / 10 | 5.6-6.0 / 10 | +3.1-3.2 pts |
-| Adversarial and edge cases | 2.0-2.7 / 10 | 5.3-6.1 / 10 | +2.6-4.1 pts |
+| Category | Baseline (no ctx) | With Context | Improvement | Pass rate |
+|---|---|---|---|---|
+| **Overall** | 1.7 / 10 | **5.7 / 10** | +4.0 pts | 47% (9/19) |
+| Commands | 2.8 / 10 | **6.2 / 10** | +3.4 pts | 40% |
+| Safety | 2.2 / 10 | **6.8 / 10** | +4.6 pts | 75% |
+| Architecture | 0.8 / 10 | **4.8 / 10** | +4.0 pts | 40% |
+| Domain | 0.0 / 10 | **6.3 / 10** | +6.3 pts | 50% |
+| Adversarial | 1.7 / 10 | **4.5 / 10** | +2.8 pts | 33% |
 
 Both baseline and context responses use the same model (sonnet), so scores reflect the impact of context files alone — not model capability differences.
 
-The most consistent signal is domain understanding, which moves from 0 to 7.8-9.0 across all tested repositories. Without context, the model is unable to describe the system's purpose. With context, it answers correctly every time.
+The strongest signal is domain understanding (+6.3 pts) and safety (+4.6 pts). Without context, sonnet scores 0/10 on domain questions. With context it reaches 6.3/10 — the agent can describe the system's purpose and key concepts.
 
 The adversarial category reflects a known limitation: when the correct answer is "not determinable from the available source files," the model with context sometimes produces confident but incorrect responses, treating the generated scaffolding files as authoritative project documentation. This is under active remediation.
 

@@ -5,31 +5,33 @@ description: Run the full test suite with project-configured settings.
 
 ## When to use this skill
 
-Use this skill whenever you need to execute the full test suite to verify correctness after making changes to the codebase.
+Use this skill when you need to execute the full test suite to verify correctness of changes made to the codebase.
 
 ## Steps
 
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run the test suite: `pytest`
-3. Review the output in the terminal — confirm all tests pass with no errors or failures reported.
+1. Install dependencies using the exact install command from the project configuration:
+   ```
+   pip install -r requirements.txt
+   ```
+   > **Caution:** No `requirements.txt` is confirmed present in the file tree. If this file is missing, dependency installation will fail. See Common Failures below.
+
+2. Run the test suite using the project-configured test command:
+   ```
+   pytest
+   ```
+
+3. Review the output to confirm all tests pass — look for a summary line indicating zero failures and zero errors.
 
 ## Expected output
 
-A successful run produces output similar to:
-
-```
-collected N items
-
-... (test results) ...
-
-======= N passed in X.XXs =======
-```
-
-All tests should show as `passed` with zero `failed`, `error`, or `warning` entries in the summary line.
+A successful run produces a pytest summary showing all collected tests passing, with no FAILED or ERROR entries. The final summary line will indicate the number of tests passed (e.g., `X passed in Y.XXs`).
 
 ## Common failures
 
-- **Missing dependencies**: If `pytest` or Flask-related imports fail, re-run `pip install -r requirements.txt` to ensure all packages are installed, then retry `pytest`.
-- **Test directory not found / no tests collected**: The test directory location is not confirmed in the current scaffolding — check your project documentation or search for `test_*.py` or `*_test.py` files and ensure they exist under the expected path before running.
-- **Swap file conflict (`.openapi.yaml.swp`)**: A swap file indicates the OpenAPI spec may have been mid-edit. Close any open editor sessions holding that file and remove the swap file (`rm .openapi.yaml.swp`) if it is stale, then re-run tests.
-- **`requirements.txt` not found**: The source files may not be fully present — verify the repository checkout is complete and that `requirements.txt` exists at the project root before running the install command.
+- **`requirements.txt` not found**: The analysis notes that no `requirements.txt` is confirmed visible in the repository file tree. This repository appears to be an example output directory, not the actual Flask application source. Locate the correct source repository and run this skill there.
+
+- **No tests collected**: The test directory could not be verified from the analysis input. If pytest reports `no tests ran` or `collected 0 items`, confirm the location of test files manually and pass the correct path to `pytest` — the test directory is not determinable from source.
+
+- **Import errors or missing modules**: If pytest fails due to missing dependencies, the application source files may not be present — this is flagged as a known pitfall. Verify you are operating on the full application repository, not just the AgentReady-generated artifacts directory.
+
+- **Entry point or application not found**: The application entry point is not determinable from source. If tests require a running application context, consult the project's own documentation to identify the correct entry point before running tests.
