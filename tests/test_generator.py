@@ -654,3 +654,48 @@ def test_domain_grounding_rules_include_service_identity() -> None:
     from agent_ready.generator import _GROUNDING_RULES
 
     assert "Service Identity" in _GROUNDING_RULES
+
+
+# ── Spec 12: multi-provider pricing and cost report ───────────────────────────
+
+
+def test_openai_model_pricing() -> None:
+    """gpt-5.4-mini cost is calculated correctly."""
+    from agent_ready.generator import _calculate_cost
+
+    assert _calculate_cost("gpt-5.4-mini", 1_000_000, 1_000_000) == 0.75
+
+
+def test_groq_model_pricing() -> None:
+    """llama-3.3-70b-versatile cost is calculated correctly (bare name and prefixed)."""
+    from agent_ready.generator import _calculate_cost
+
+    assert round(_calculate_cost("llama-3.3-70b-versatile", 1_000_000, 1_000_000), 2) == 1.38
+    # Also works with LiteLLM prefix
+    assert round(_calculate_cost("groq/llama-3.3-70b-versatile", 1_000_000, 1_000_000), 2) == 1.38
+
+
+def test_unknown_model_pricing_is_zero() -> None:
+    """Unknown model returns zero cost without crashing."""
+    from agent_ready.generator import _calculate_cost
+
+    assert _calculate_cost("unknown-model-xyz", 1_000_000, 1_000_000) == 0.0
+
+
+def test_cost_report_includes_provider() -> None:
+    """get_usage_report must include the provider field."""
+    from agent_ready.generator import get_usage_report, reset_usage
+
+    reset_usage()
+    report = get_usage_report(provider="openai")
+    assert report["provider"] == "openai"
+
+
+def test_cost_report_provider_defaults_to_unknown() -> None:
+    """get_usage_report defaults provider to unknown when not specified."""
+    from agent_ready.generator import get_usage_report, reset_usage
+
+    reset_usage()
+    report = get_usage_report()
+    assert "provider" in report
+    assert report["provider"] == "unknown"

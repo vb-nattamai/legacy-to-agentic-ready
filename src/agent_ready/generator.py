@@ -32,27 +32,71 @@ _usage_totals: dict = {
     "by_model": {},
 }
 
-ANTHROPIC_PRICING: dict = {
+MODEL_PRICING: dict = {
+    # Anthropic
     "claude-opus-4-6": {"input": 15.00, "output": 75.00},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
     "claude-haiku-4-5": {"input": 0.80, "output": 4.00},
     "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
+    # OpenAI
+    "gpt-5.4": {"input": 2.50, "output": 10.00},
+    "gpt-5.4-mini": {"input": 0.15, "output": 0.60},
+    "gpt-5.4-nano": {"input": 0.10, "output": 0.40},
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    # Groq (prices per 1M tokens)
+    "llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
+    "llama-3.1-8b-instant": {"input": 0.05, "output": 0.08},
+    # Google
+    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
+    "gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
+    # Mistral
+    "mistral-large-latest": {"input": 2.00, "output": 6.00},
+    "mistral-small-latest": {"input": 0.10, "output": 0.30},
+    # Together AI
+    "Qwen/Qwen3.5-397B-A17B": {"input": 0.60, "output": 3.60},
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo": {"input": 0.88, "output": 0.88},
+    "Qwen/Qwen3.5-9B": {"input": 0.10, "output": 0.15},
+    # Legacy aliases (kept for backward compat)
+    "Qwen/Qwen2.5-72B-Instruct-Turbo": {"input": 1.20, "output": 1.20},
+    "Qwen/Qwen2.5-7B-Instruct-Turbo": {"input": 0.30, "output": 0.30},
 }
+
+# Keep old name as an alias so external code that imported ANTHROPIC_PRICING still works.
+ANTHROPIC_PRICING = MODEL_PRICING
+
+
+def _strip_provider_prefix(model: str) -> str:
+    """Strip LiteLLM provider prefix (e.g. 'groq/', 'gemini/', 'together_ai/') from model name."""
+    for prefix in (
+        "anthropic/",
+        "openai/",
+        "groq/",
+        "gemini/",
+        "mistral/",
+        "together_ai/",
+        "ollama/",
+    ):
+        if model.startswith(prefix):
+            return model[len(prefix) :]
+    return model
 
 
 def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    pricing = ANTHROPIC_PRICING.get(model, {"input": 0.0, "output": 0.0})
+    pricing = MODEL_PRICING.get(model) or MODEL_PRICING.get(
+        _strip_provider_prefix(model), {"input": 0.0, "output": 0.0}
+    )
     return (
         input_tokens / 1_000_000 * pricing["input"] + output_tokens / 1_000_000 * pricing["output"]
     )
 
 
-def get_usage_report() -> dict:
+def get_usage_report(provider: str = "unknown") -> dict:
     total_cost = sum(
         _calculate_cost(model, data["input"], data["output"])
         for model, data in _usage_totals.get("by_model", {}).items()
     )
-    return {**_usage_totals, "estimated_cost_usd": round(total_cost, 4)}
+    return {"provider": provider, **_usage_totals, "estimated_cost_usd": round(total_cost, 4)}
 
 
 def reset_usage() -> None:
@@ -121,6 +165,74 @@ CRITICAL GROUNDING RULES — follow these before writing any fact:
 
 Violating these rules produces context files that hallucinate facts and make AI agents less reliable, not more.
 The goal is grounded accuracy, not completeness.\
+"""
+
+
+def _is_claude_model(model: str) -> bool:
+    bare = _strip_provider_prefix(model).lower()
+    return bare.startswith("claude")
+
+
+def _format_verified_facts_for_prompt(verified_facts: dict, model: str) -> str:
+    """
+    Format verified_facts as grounding constraints tuned to the model family.
+    Claude follows XML-style instructions well; OpenAI/Groq/Llama follow
+    explicit numbered rules with concrete values better.
+    """
+    dm = verified_facts.get("dependency_manager", {})
+    linter = verified_facts.get("linter", {})
+
+    if _is_claude_model(model):
+        return f"""\
+<verified_facts>
+dependency_manager: {json.dumps(dm)}
+linter: {json.dumps(linter)}
+</verified_facts>
+
+GROUNDING RULES:
+- dependency_manager.value is the ONLY authoritative dependency file.
+  If value is "pyproject.toml", never reference requirements.txt as the primary source.
+  If confidence is "not_found", write "Not determinable from source".
+- linter.value is the ONLY configured linting tool.
+  If value is "ruff", always mention ruff by name.
+  If confidence is "not_found", write "No linting tools configured".
+"""
+    else:
+        dm_value = dm.get("value", "Not determinable from source")
+        dm_confidence = dm.get("confidence", "unknown")
+        dm_rule = (
+            "Use pyproject.toml [project].dependencies as the ONLY source. NEVER reference requirements.txt."
+            if dm_value == "pyproject.toml"
+            else (
+                "Use requirements.txt. Do not reference pyproject.toml as primary."
+                if dm_value == "requirements.txt"
+                else "Write: Not determinable from source"
+            )
+        )
+        linter_value = linter.get("value") or "None"
+        linter_confidence = linter.get("confidence", "unknown")
+        linter_rule = (
+            f"Mention {linter_value} by name. Include lint command and format command."
+            if linter_value and linter_value != "None"
+            else "Write: No linting tools configured in this repository."
+        )
+        return f"""\
+MANDATORY FACTS — follow exactly, no exceptions, no additions:
+
+1. DEPENDENCY MANAGEMENT
+   Authoritative file: {dm_value}
+   Confidence: {dm_confidence}
+   RULE: {dm_rule}
+
+2. LINTING / FORMATTING TOOLS
+   Configured tool: {linter_value}
+   Confidence: {linter_confidence}
+   RULE: {linter_rule}
+
+3. UNKNOWN FACTS
+   If a fact has confidence=not_found, write exactly: "Not determinable from source"
+   Never invent values. Never use "likely" or "probably".
+   Never recommend tools (dotenv, GitHub Secrets, etc.) unless they appear in the source files.
 """
 
 
@@ -276,6 +388,7 @@ def build_agent_context(
 
 
 def generate_agents_md(model: str, analysis: dict[str, Any]) -> str:
+    vf_block = _format_verified_facts_for_prompt(analysis.get("verified_facts", {}), model)
     return _call(
         model,
         f"""\
@@ -294,6 +407,7 @@ If information is not in the analysis input, write "Not determinable from source
 
 {_GROUNDING_RULES}
 
+{vf_block}
 1. ## Project Overview
    Name, what it actually does, language/framework/build tool.
 
@@ -346,6 +460,7 @@ def generate_claude_md(model: str, analysis: dict[str, Any]) -> str:
     else:
         skills_section = ""
 
+    vf_block = _format_verified_facts_for_prompt(analysis.get("verified_facts", {}), model)
     return _call(
         model,
         f"""\
@@ -365,6 +480,7 @@ write "Not determinable from source" rather than inventing it.
 
 {_GROUNDING_RULES}
 
+{vf_block}
 1. ## Critical Commands
    Use ONLY these commands — never invent alternatives:
    - Install:  {analysis.get("install_command", "see analysis")}

@@ -466,11 +466,11 @@ def _run_eval_pipeline(
 # ── CLI ────────────────────────────────────────────────────────────────────
 
 
-def _write_cost_report(target: Path) -> None:
+def _write_cost_report(target: Path, provider: str = "unknown") -> None:
     """Write cost_report.json after ALL pipeline phases complete (gen + eval)."""
     from agent_ready import generator
 
-    cost_data = generator.get_usage_report()
+    cost_data = generator.get_usage_report(provider=provider)
     (target / "cost_report.json").write_text(json.dumps(cost_data, indent=2))
 
 
@@ -637,7 +637,7 @@ Or bypass presets entirely with any LiteLLM model string:
         _run_eval_pipeline(
             target=target, models=models, fail_level=args.fail_level, quiet=args.quiet
         )
-        _write_cost_report(target)
+        _write_cost_report(target, provider=provider_label)
         return
 
     # ── Transformation ────────────────────────────────────────────────────
@@ -703,7 +703,7 @@ Or bypass presets entirely with any LiteLLM model string:
         )
 
     if not args.dry_run:
-        _write_cost_report(target)
+        _write_cost_report(target, provider=provider_label)
 
 
 if __name__ == "__main__":
