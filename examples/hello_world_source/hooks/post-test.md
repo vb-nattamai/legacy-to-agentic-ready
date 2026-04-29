@@ -5,22 +5,22 @@ trigger: After running the test command
 
 ## Purpose
 
-After `pytest` completes, this hook captures the test outcome and updates session state so the agent knows whether it is safe to proceed with commits, refactors, or further code changes in this Flask repository.
+After `pytest` completes, this hook records the test outcome and surfaces known state-isolation pitfalls specific to this repo so the agent can decide whether failures require test-client or app-level fixes.
 
 ## Actions
 
-1. Record the exit code and summary output from `pytest` into `agent-context.json` under the session state fields defined in `memory/schema.md`, marking the last-known test status as passing or failing.
-2. If the test run failed, flag the session as blocked and surface the known pitfall most relevant to the failure — specifically checking for cross-test global state pollution caused by the module-level `_greetings` list persisting across test cases, which is identified as a likely source of test-isolation failures in this repository.
-3. If the test run passed, confirm that `cost_report.json` was not modified during the test run, since it is a restricted write path that must not be altered by test execution.
+1. Load current session state from `agent-context.json` and validate it against the contract defined in `memory/schema.md`; update the session's last-test-result field with the `pytest` exit code and timestamp.
+2. If `pytest` reported failures, surface the following repo-specific pitfall for agent review: the `_greetings` list is module-level mutable state in `app.py` — greetings accumulate across test functions unless the test client or app object is re-created per test in the `tests/` directory.
 
 ## Context loaded
 
-- Current session state from `agent-context.json` (last test status, blocking flags, session metadata).
-- Session state contract from `memory/schema.md` (field names and types required when writing test results back to context).
-- The test command in use is `pytest` (source: `pyproject.toml [tool.pytest]`, confidence: high).
+- Current session state from `agent-context.json` (last-test-result, active task, prior pitfall acknowledgements).
+- Session state contract from `memory/schema.md` (field definitions and required keys).
+- Verified test command: `pytest` (source: `pyproject.toml [tool.pytest]`, confidence: high).
+- Known domain concepts in scope: Greetings (in-memory store, module-level `_greetings` list in `app.py`) and Service Identity (root endpoint returning name and version, `app.py`).
 
 ## Skipped when
 
 - `AGENT_SKIP_HOOKS=true` environment variable is set.
-- The test command was not `pytest` (e.g., the agent ran a targeted script directly rather than the project test suite).
-- `agent-context.json` is not present or is not writable, preventing safe state persistence.
+- The test command was not `pytest` (hook is bound to the verified test command for this repo and should not run for ad-hoc script invocations).
+- `agent-context.json` is absent or unreadable (hook cannot record outcome without a valid session state file).

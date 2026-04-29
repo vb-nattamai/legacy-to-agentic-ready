@@ -1,16 +1,16 @@
 {
-  "input_tokens": 172384,
-  "output_tokens": 37700,
+  "input_tokens": 180921,
+  "output_tokens": 37707,
   "calls": 136,
   "by_model": {
     "claude-sonnet-4-6": {
-      "input": 116409,
-      "output": 26780
+      "input": 123965,
+      "output": 26806
     },
     "claude-haiku-4-5-20251001": {
-      "input": 55975,
-      "output": 10920
+      "input": 56956,
+      "output": 10901
     }
   },
-  "estimated_cost_usd": 0.8394
+  "estimated_cost_usd": 0.8632
 }

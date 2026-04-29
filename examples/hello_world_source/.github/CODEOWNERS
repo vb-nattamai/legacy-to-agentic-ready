@@ -15,6 +15,3 @@ skills/                   *
 hooks/                    *
 .github/copilot-instructions.md  *
 .github/workflows/        *
-
-# Restricted paths identified by AgentReady analysis
-cost_report.json  *

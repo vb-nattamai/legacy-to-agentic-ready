@@ -3,9 +3,10 @@
 openapi: 3.1.0
 info:
   title: hello_world
-  description: "A minimal Flask REST API that provides personalised greetings, records\
-    \ them in memory, and exposes health-check and listing endpoints.\n\n**Auto-generated\
-    \ stub** \u2014 fill in paths, schemas, and security.\nStack: python / Flask"
+  description: "A minimal Flask REST API that provides personalised greetings and\
+    \ records them in an in-memory store, with health-check and service-info endpoints.\n\
+    \n**Auto-generated stub** \u2014 fill in paths, schemas, and security.\nStack:\
+    \ python / Flask"
   version: 0.1.0
 paths:
   /health:

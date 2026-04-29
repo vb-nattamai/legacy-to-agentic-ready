@@ -19,7 +19,7 @@
     ]
   },
   "dynamic": {
-    "last_scanned": "2026-04-29T11:38:48.004268+00:00",
+    "last_scanned": "2026-04-29T12:11:06.468272+00:00",
     "secondary_languages": [],
     "build_system": "pip",
     "build_command": "pip install -e '.[dev]' 2>/dev/null || pip install -r requirements.txt",
@@ -34,38 +34,38 @@
       "app": "app.py",
       "tests": "tests/"
     },
-    "architecture_summary": "A single-file Flask application that exposes four REST endpoints (index, health, greet, and greetings). All state is held in an in-memory list; there is no database or external dependency. Tests live in a dedicated tests/ directory and exercise the API through Flask's test client.",
+    "architecture_summary": "Single-module Flask application exposing four REST endpoints (index, health, greet, greetings). All state is held in an in-memory list within the app module\u2014there is no database or external dependency. The test suite exercises these endpoints through Flask's test client.",
     "key_components": [
       {
         "name": "app",
         "path": "app.py",
-        "responsibility": "Defines the Flask application, all route handlers, and the in-memory greetings store."
+        "responsibility": "Defines the Flask application, all REST endpoints, and the in-memory greetings store."
       },
       {
         "name": "test_app",
         "path": "tests/test_app.py",
-        "responsibility": "Contains tests for the API endpoints."
+        "responsibility": "Contains the test suite that validates all API endpoints."
       }
     ],
     "agent_safe_operations": [
-      "Adding new GET/POST endpoints in app.py",
-      "Adding new test files or test functions under tests/",
-      "Updating dependencies in requirements.txt and pyproject.toml",
-      "Refactoring greeting logic within app.py",
-      "Running pytest to validate changes"
+      "Adding new GET/POST endpoints to app.py",
+      "Adding new test functions in tests/test_app.py",
+      "Updating greeting message formatting",
+      "Adding new utility modules alongside app.py",
+      "Updating requirements.txt with new dependencies"
     ],
     "agent_forbidden_operations": [
-      "Removing or renaming existing public endpoints (/, /health, /greet/<name>, /greetings) without updating tests",
-      "Changing the _greetings in-memory store to a database without explicit instruction",
-      "Modifying cost_report.json",
-      "Changing the default port (5000) or host binding without explicit instruction"
+      "Removing or renaming existing public endpoints without updating tests",
+      "Changing the _greetings in-memory data structure without updating all consumers",
+      "Changing the Flask app variable name 'app' (likely imported by tests)",
+      "Removing pytest configuration from pyproject.toml"
     ],
     "potential_pitfalls": [
-      "The _greetings list is module-level global state; it persists across requests in a single process but resets on restart, and tests that don't isolate state will see cross-test pollution.",
-      "Flask's test client must be obtained via app.test_client(); importing app directly and using httpx against localhost requires the server to actually be running.",
-      "All routes use @app.get() shorthand (Flask 2.x+); using @app.route() with methods=['GET'] is equivalent but mixing styles can confuse linters.",
-      "There is no CORS, authentication, or input validation \u2014 adding middleware must be tested carefully to avoid breaking existing endpoint contracts.",
-      "pyproject.toml declares setuptools build backend but there is no setup.cfg or package directory, so 'pip install -e .' may fail without the requirements.txt fallback."
+      "The _greetings list is module-level mutable state; tests that call /greet/<name> will accumulate greetings across test functions unless the test client or app is re-created per test.",
+      "app.py serves as both the module defining the Flask app and the runnable entry point; importing it at module level triggers route registration and list initialisation.",
+      "No database is used\u2014data is lost on restart and is not thread-safe under concurrent requests.",
+      "The project has no extras_require 'dev' section in pyproject.toml, so 'pip install -e .[dev]' in the Makefile will fall back to requirements.txt.",
+      "Flask test client must be obtained from the 'app' object in app.py; renaming that variable will break tests."
     ],
     "conventions": {
       "naming": "snake_case",

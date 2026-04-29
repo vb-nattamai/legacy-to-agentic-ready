@@ -2,16 +2,17 @@
 
 # System Prompt: hello_world
 
-You are working on **hello_world**, a minimal Flask REST API that provides personalised greetings, records them in memory, and exposes health-check and listing endpoints.
+You are working on **hello_world**, a minimal Flask REST API that provides personalised greetings and records them in an in-memory store, with health-check and service-info endpoints.
 
 ---
 
 ## Tech Stack
 
-- **Primary language:** Python (>=3.11)
-- **Frameworks:** Flask (>=2.3), pytest
-- **Build system:** pip / pyproject.toml (setuptools backend)
-- **Linter/formatter:** ruff (rules: E, F, I — line length 88)
+- **Language:** Python (>=3.11)
+- **Framework:** Flask (>=2.3)
+- **Test framework:** pytest
+- **Linter/Formatter:** ruff (`ruff check .` / `ruff format .`), rules: E, F, I, line length: 88
+- **Build/dependency system:** pip via `pyproject.toml` — this is the authoritative source for dependencies. Do not edit `requirements.txt` for project dependencies.
 
 ---
 
@@ -19,65 +20,63 @@ You are working on **hello_world**, a minimal Flask REST API that provides perso
 
 | Action | Command |
 |--------|---------|
-| **Install** | `pip install -r requirements.txt` |
-| **Install (editable)** | detected as likely: `pip install -e .` — verify before use |
-| **Build** | `pip install -e '.[dev]' 2>/dev/null \|\| pip install -r requirements.txt` |
-| **Run** | `python app.py` |
-| **Test** | `pytest` |
-| **Lint** | `ruff check .` |
-| **Format** | `ruff format .` |
+| Install | `pip install -e .` (detected as likely — verify before use) |
+| Run | `python app.py` |
+| Test | `pytest` |
+| Lint | `ruff check .` |
+| Format | `ruff format .` |
 
-> **Dependency management:** The authoritative source for project dependencies is the `[project].dependencies` list in `pyproject.toml`. Do not edit `requirements.txt` to add project dependencies.
-
----
-
-## What You Must Never Touch
-
-- **`cost_report.json`** — this file is restricted. Do not read from, write to, or modify it under any circumstances.
-- Do not remove or rename any existing public endpoints (`/`, `/health`, `/greet/<name>`, `/greetings`) without simultaneously updating all affected tests.
-- Do not migrate the `_greetings` in-memory store to a database unless explicitly instructed.
-- Do not change the default port (5000) or host binding unless explicitly instructed.
-
----
-
-## Domain Concepts
-
-| Term | Definition |
-|------|-----------|
-| **Greeting** | A personalised message generated for a given name, stored as a dict with `name` and `message` fields. |
-| **Greetings Store** | The in-memory list (`_greetings`) that accumulates every greeting created via the `/greet/<name>` endpoint. |
-| **Health Check** | The `/health` endpoint that returns a simple status object indicating the service is running. |
+> Build command (`pip install -e '.[dev]'`): the project has no `extras_require` dev section in `pyproject.toml`, so this will fall back to `requirements.txt`.
 
 ---
 
 ## Key Components
 
-| Component | Path | Responsibility |
-|-----------|------|---------------|
-| `app` | `app.py` | Defines the Flask application, all route handlers, and the in-memory greetings store. |
-| `test_app` | `tests/test_app.py` | Contains tests for the API endpoints. |
+| Name | Path | Responsibility |
+|------|------|----------------|
+| `app` | `app.py` | Defines the Flask application, all REST endpoints, and the in-memory greetings store. |
+| `test_app` | `tests/test_app.py` | Contains the test suite that validates all API endpoints. |
+
+---
+
+## Domain Concepts
+
+- **Greetings:** An in-memory store (module-level list `_greetings`) — intentionally simple, no database. Holds personalised greeting records containing a name and message, populated by the `/greet/<name>` endpoint.
+- **Service Identity:** The root `GET /` endpoint returns the service name and version string.
 
 ---
 
 ## Coding Conventions
 
-- **Naming:** snake_case throughout.
-- **Structure:** single-package; all application code lives in `app.py` at the repository root.
-- **Routes:** use `@app.get()` shorthand (Flask 2.x+) consistently; do not mix with `@app.route()`.
-- **Tests:** live under `tests/`; use Flask's built-in test client.
+- **Naming:** `snake_case` throughout.
+- **Structure:** Single-package layout. Application logic and entry point coexist in `app.py`.
+- **Dependencies:** Add new dependencies to the `dependencies` list in the `[project]` section of `pyproject.toml`. Do not edit `requirements.txt` as the authoritative source.
 
 ---
 
-## Safe Operations
+## What You Must Never Touch
 
-You may: add new GET/POST endpoints in `app.py`, add new test files or functions under `tests/`, update dependencies in `requirements.txt` and `pyproject.toml`, refactor greeting logic within `app.py`, and run `pytest` to validate changes.
+- Do not remove or rename existing public endpoints without updating all corresponding tests.
+- Do not change the `_greetings` in-memory data structure without updating every consumer of it.
+- Do not rename the Flask application variable `app` in `app.py` — it is imported directly by the test suite.
+- Do not remove pytest configuration from `pyproject.toml`.
+
+**Restricted write paths:** Not determinable from source — fill in `agent-context.json` static.restricted_write_paths after reviewing your repo.
 
 ---
 
 ## Pitfalls — Read Before Making Any Change
 
-1. The `_greetings` list is module-level global state; it persists across requests in a single process but resets on restart, and tests that don't isolate state will see cross-test pollution.
-2. Flask's test client must be obtained via `app.test_client()`; importing `app` directly and using `httpx` against localhost requires the server to actually be running.
-3. All routes use `@app.get()` shorthand (Flask 2.x+); using `@app.route()` with `methods=['GET']` is equivalent but mixing styles can confuse linters.
-4. There is no CORS, authentication, or input validation — adding middleware must be tested carefully to avoid breaking existing endpoint contracts.
-5. `pyproject.toml` declares a setuptools build backend but there is no `setup.cfg` or package directory, so `pip install -e .` may fail without the `requirements.txt` fallback.
+1. The `_greetings` list is module-level mutable state; tests that call `/greet/<name>` will accumulate greetings across test functions unless the test client or app is re-created per test.
+2. `app.py` serves as both the module defining the Flask app and the runnable entry point; importing it at module level triggers route registration and list initialisation.
+3. No database is used — data is lost on restart and is not thread-safe under concurrent requests.
+4. The project has no `extras_require` 'dev' section in `pyproject.toml`, so `pip install -e '.[dev]'` in the Makefile will fall back to `requirements.txt`.
+5. Flask test client must be obtained from the `app` object in `app.py`; renaming that variable will break tests.
+
+---
+
+## Safety
+
+**Secrets:** No secrets handling mechanism is configured in this repository. Establish one before adding any credentials.
+
+**Irreversible operations:** No irreversible operations are present in this codebase. State changes are ephemeral (in-memory only).

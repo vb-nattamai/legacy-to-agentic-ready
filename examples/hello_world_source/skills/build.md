@@ -5,27 +5,45 @@ description: Build the project artifacts.
 
 ## When to use this skill
 
-Use this skill when you need to install project dependencies and prepare the environment to run or develop the application.
+Use this skill when you need to install the project and its dependencies to prepare the environment for running or testing the application.
 
 ## Steps
 
-1. Install dependencies by running: `pip install -e '.[dev]' 2>/dev/null || pip install -r requirements.txt`
-2. Verify the entry point is accessible: confirm `app.py` exists at the repository root.
-3. Confirm the build succeeded by running the application: `python app.py`
+1. Install the project and its dependencies:
+   ```
+   pip install -e .
+   ```
+   If the above fails, fall back to:
+   ```
+   pip install -r requirements.txt
+   ```
+2. Verify the Flask entry point is importable:
+   ```
+   python -c "from app import app; print('app loaded')"
+   ```
+3. Confirm the application starts without error:
+   ```
+   python app.py
+   ```
 
 ## Expected output
 
-A successful run of the install step will produce pip output showing packages being installed (or "already satisfied" messages for cached packages), ending with no errors. Running `python app.py` will start the Flask development server, typically printing output such as:
-
+A successful install via `pip install -e .` will print dependency resolution output ending with:
+```
+Successfully installed <package-list>
+```
+The import check will print:
+```
+app loaded
+```
+Starting `python app.py` will produce Flask's development server output, e.g.:
 ```
  * Running on http://127.0.0.1:5000
 ```
 
-with no import errors or tracebacks.
-
 ## Common failures
 
-- **`pip install -e '.[dev]'` fails with "No such file or directory" or build backend error**: `pyproject.toml` declares a setuptools build backend but there is no `setup.cfg` or package directory, so editable install may fail. The command automatically falls back to `pip install -r requirements.txt` — confirm that fallback completed without errors.
-- **Wrong Python version**: This project requires Python `>=3.11`. If the install or run step fails with syntax errors or version-related messages, verify your active Python version with `python --version` and switch to a compatible interpreter.
-- **`ModuleNotFoundError` for `flask`**: The install step did not complete successfully. Re-run `pip install -r requirements.txt` directly and inspect the output for errors.
-- **`app.py` not found**: You are not running the command from the repository root. Change to the repository root directory before running any build or run commands.
+- **`pip install -e .` fails with no `[dev]` extras error**: The project has no `extras_require` dev section; run `pip install -r requirements.txt` instead — this is the authoritative fallback.
+- **`python -c "from app import app"` fails with `ModuleNotFoundError: flask`**: Dependencies were not installed successfully; re-run the install step and confirm `flask>=2.3` is present in the environment (`pip show flask`).
+- **`python app.py` fails with `Address already in use`**: Another process is occupying the default Flask port; stop the conflicting process or set `FLASK_RUN_PORT` to a free port before retrying.
+- **Wrong Python version**: This project requires Python `>=3.11`; confirm your active interpreter with `python --version` and switch to a compliant version if needed.

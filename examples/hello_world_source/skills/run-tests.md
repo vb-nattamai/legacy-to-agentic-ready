@@ -5,27 +5,31 @@ description: Run the full test suite with project-configured settings.
 
 ## When to use this skill
 
-Use this skill whenever you need to execute the full test suite to verify correctness after making changes to the codebase.
+Use this skill whenever you need to verify that all tests pass after making changes to the codebase.
 
 ## Steps
 
-1. Install dependencies: `pip install -e '.[dev]' 2>/dev/null || pip install -r requirements.txt`
-2. Run the test suite: `pytest`
-3. Confirm success by checking that all collected tests pass with zero failures or errors reported in the final summary line.
+1. Install project dependencies: `pip install -e .`
+2. Run the full test suite: `pytest`
+3. Confirm success by reviewing the summary line printed at the end of the pytest output.
 
 ## Expected output
 
 A successful run produces a pytest summary line such as:
 
 ```
-============================= N passed in X.XXs ==============================
+collected N items
+
+tests/... PASSED
+...
+N passed in X.XXs
 ```
 
-All tests in the `tests` directory are collected and executed. No failures, errors, or unexpected warnings should appear.
+All collected test items should show `PASSED` with no `FAILED`, `ERROR`, or `WARNING` lines related to test results.
 
 ## Common failures
 
-- **Cross-test state pollution**: The `_greetings` list is module-level global state in `app.py`. Tests that add or mutate greetings without resetting state between runs will affect subsequent tests. Ensure each test isolates state (e.g., by resetting the list in a fixture's teardown).
-- **Flask test client not configured**: Tests must obtain the test client via `app.test_client()`. If a test imports `app` and attempts HTTP calls against a localhost server, the server must actually be running — this is not the standard test mode. Use `app.test_client()` instead.
-- **Dependency installation fails**: `pip install -e .` may fail because `pyproject.toml` declares a setuptools build backend but lacks a package directory. The install command includes an automatic fallback to `pip install -r requirements.txt`; if the editable install fails, confirm the fallback completed successfully before running tests.
-- **Wrong Python version**: This project requires Python `>=3.11`. If tests fail with syntax or compatibility errors, verify your active Python version with `python --version`.
+- **Import error on `app.py`**: The `app` variable in `app.py` is the Flask application object; if it has been renamed, the test client instantiation in tests will fail. Restore the variable name to `app` or update test references accordingly.
+- **Accumulated state across tests**: The `_greetings` list is module-level mutable state. If tests call `/greet/<name>` and share the same app instance, greetings accumulate across test functions and assertions may fail. Re-create the Flask test client per test function, or reset `_greetings` in a fixture between tests.
+- **Missing dependencies**: If `pytest` or `flask` are not found, run `pip install -e .` from the repository root to install all declared dependencies from `pyproject.toml`.
+- **Wrong Python version**: This project requires Python `>=3.11`. If tests fail with syntax or compatibility errors, verify the active interpreter with `python --version` and switch to a supported version.
