@@ -72,8 +72,8 @@
       "description": "Code quality tools from config files",
       "static_sources": [
         {"file": ".flake8", "exists": "flake8"},
-        {"file": "pyproject.toml", "toml_path": "tool.ruff"},
-        {"file": "pyproject.toml", "toml_path": "tool.mypy"},
+        {"file": "pyproject.toml", "exists_section": "tool.ruff", "value": "ruff"},
+        {"file": "pyproject.toml", "exists_section": "tool.mypy", "value": "mypy"},
         {"file": ".mypy.ini", "exists": "mypy"},
         {"file": ".pre-commit-config.yaml", "read": true},
         {"file": "setup.cfg", "grep": "[flake8]"}

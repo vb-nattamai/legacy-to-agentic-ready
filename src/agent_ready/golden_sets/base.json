@@ -11,7 +11,7 @@
       "description": "Test command from CI config, Makefile, or package manager",
       "static_sources": [
         {"file": "package.json", "jsonpath": "scripts.test"},
-        {"file": "Makefile", "pattern": "^test:"},
+        {"file": "Makefile", "makefile_cmd": "test"},
         {"file": "pyproject.toml", "toml_path": "tool.taskipy.tasks.test"},
         {"file": ".github/workflows/ci.yml", "grep": "run:.*test"},
         {"file": ".github/workflows/ci.yaml", "grep": "run:.*test"}
@@ -59,7 +59,9 @@
         {"file": "package.json", "jsonpath": "scripts.start"},
         {"file": "package.json", "jsonpath": "scripts.dev"},
         {"file": "Procfile", "pattern": "^web:"},
-        {"file": "Makefile", "pattern": "^run:|^serve:|^dev:"},
+        {"file": "Makefile", "makefile_cmd": "run"},
+        {"file": "Makefile", "makefile_cmd": "serve"},
+        {"file": "Makefile", "makefile_cmd": "dev"},
         {"file": "docker-compose.yml", "exists": "docker compose up"}
       ],
       "llm_prompt": "What command starts the application in development mode? Look at package.json scripts, Makefile, Procfile, README. Return the command only."

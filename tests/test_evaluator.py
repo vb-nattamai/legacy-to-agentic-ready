@@ -6,6 +6,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from agent_ready import evaluator
+from agent_ready.ground_truth import (
+    _extract_dependency_source,
+    _extract_linting_tools,
+    _extract_makefile_command,
+    _extract_static,
+)
 
 
 def _sample_question() -> dict[str, str]:
@@ -358,3 +364,97 @@ def test_judge_panels_constant_has_three_entries() -> None:
         assert "label" in panel
         assert "icon" in panel
         assert "system" in panel
+
+
+# ── Ground truth extractor tests ──────────────────────────────────────────────
+
+
+def test_makefile_test_command_extracts_body_not_label() -> None:
+    """Makefile extractor must return command body, not target label."""
+    makefile = "test:\n\tpytest\n\nrun:\n\tpython app.py\n"
+    result = _extract_makefile_command(makefile, "test")
+    assert result == "pytest"
+    assert result != "test:"
+
+
+def test_makefile_run_command_extracts_body_not_label() -> None:
+    makefile = "test:\n\tpytest\n\nrun:\n\tpython app.py\n"
+    result = _extract_makefile_command(makefile, "run")
+    assert result == "python app.py"
+    assert result != "run:"
+
+
+def test_makefile_command_returns_none_for_missing_target() -> None:
+    makefile = "test:\n\tpytest\n"
+    assert _extract_makefile_command(makefile, "serve") is None
+
+
+def test_makefile_command_handles_spaces_indent() -> None:
+    makefile = "test:\n    pytest -v\n"
+    assert _extract_makefile_command(makefile, "test") == "pytest -v"
+
+
+def test_dependency_source_prefers_pyproject_over_requirements() -> None:
+    """pyproject.toml with [project] section takes priority over requirements.txt."""
+    files = {
+        "pyproject.toml": "[project]\nname = 'x'\ndependencies = ['flask']\n",
+        "requirements.txt": "flask\npytest\n",
+    }
+    result = _extract_dependency_source(files)
+    assert result["file"] == "pyproject.toml"
+
+
+def test_dependency_source_falls_back_to_requirements() -> None:
+    """requirements.txt is used when pyproject.toml has no [project] section."""
+    files = {
+        "pyproject.toml": "[build-system]\nrequires = ['setuptools']\n",
+        "requirements.txt": "flask\npytest\n",
+    }
+    result = _extract_dependency_source(files)
+    assert result["file"] == "requirements.txt"
+
+
+def test_dependency_source_returns_none_when_no_files() -> None:
+    result = _extract_dependency_source({})
+    assert result["file"] is None
+
+
+def test_linting_tools_extracts_ruff_from_pyproject() -> None:
+    """Ruff configuration is correctly extracted from pyproject.toml."""
+    content = "[tool.ruff]\nline-length = 88\n\n[tool.ruff.lint]\nselect = ['E', 'F']\n"
+    result = _extract_linting_tools(content)
+    assert result["linter"] == "ruff"
+    assert result["formatter"] == "ruff format"
+    assert result.get("line_length") == "88"
+
+
+def test_linting_tools_returns_note_when_no_tools() -> None:
+    content = "[project]\nname = 'x'\n"
+    result = _extract_linting_tools(content)
+    assert result.get("note") == "No linting tools configured"
+
+
+def test_extract_static_makefile_cmd_via_source_dict(tmp_path: Path) -> None:
+    """_extract_static handles makefile_cmd key and returns command body."""
+    makefile = tmp_path / "Makefile"
+    makefile.write_text("test:\n\tpytest\n")
+    source = {"file": "Makefile", "makefile_cmd": "test"}
+    result = _extract_static(tmp_path, source)
+    assert result == "pytest"
+
+
+def test_extract_static_exists_section_detects_tool_ruff(tmp_path: Path) -> None:
+    """_extract_static handles exists_section and returns value when section found."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("[tool.ruff]\nline-length = 88\n")
+    source = {"file": "pyproject.toml", "exists_section": "tool.ruff", "value": "ruff"}
+    result = _extract_static(tmp_path, source)
+    assert result == "ruff"
+
+
+def test_extract_static_exists_section_returns_none_when_missing(tmp_path: Path) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("[project]\nname = 'x'\n")
+    source = {"file": "pyproject.toml", "exists_section": "tool.ruff", "value": "ruff"}
+    result = _extract_static(tmp_path, source)
+    assert result is None

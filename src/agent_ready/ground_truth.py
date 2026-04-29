@@ -90,6 +90,18 @@ def _extract_static(target: Path, source: dict[str, Any]) -> str | None:
     if "toml_path" in source:
         return _toml_get(content, source["toml_path"])
 
+    # makefile_cmd: extract the command body for a Makefile target (not the label)
+    if "makefile_cmd" in source:
+        return _extract_makefile_command(content, source["makefile_cmd"])
+
+    # exists_section: return a value when a TOML section header like [tool.ruff] is present
+    if "exists_section" in source:
+        section_header = f"[{source['exists_section']}]"
+        for line in content.splitlines():
+            if line.strip() == section_header:
+                return source.get("value", source["exists_section"].split(".")[-1])
+        return None
+
     return None
 
 
@@ -123,6 +135,76 @@ def _glob_match(target: Path, pattern: str) -> str | None:
     """Return the first match of a glob pattern relative to target, or None."""
     matches = list(target.glob(pattern))
     return str(matches[0].relative_to(target)) if matches else None
+
+
+def _extract_makefile_command(content: str, target: str) -> str | None:
+    """Extract the command body for a given Makefile target (not the label itself).
+
+    Example Makefile:
+        test:
+            pytest
+
+    _extract_makefile_command(content, "test") -> "pytest"
+    """
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # Match "test:" or "test: dep1 dep2"
+        if stripped == f"{target}:" or stripped.startswith(f"{target}:"):
+            # Find the next line that is a tab-indented command body
+            for j in range(i + 1, len(lines)):
+                cmd_line = lines[j]
+                if cmd_line.startswith("\t") or cmd_line.startswith("    "):
+                    return cmd_line.strip()
+                # Stop if we hit a non-blank, non-comment line that isn't indented
+                if cmd_line.strip() and not cmd_line.startswith("#"):
+                    break
+    return None
+
+
+def _extract_dependency_source(file_contents: dict[str, str]) -> dict[str, str | None]:
+    """Return the authoritative dependency management file and its content.
+
+    pyproject.toml with a [project] dependencies section takes priority over
+    requirements.txt, which may be present as a convenience file only.
+    """
+    pyproject = file_contents.get("pyproject.toml", "")
+    if "[project]" in pyproject and "dependencies" in pyproject:
+        return {
+            "file": "pyproject.toml",
+            "content": pyproject,
+            "note": "pyproject.toml [project].dependencies is authoritative",
+        }
+    reqs = file_contents.get("requirements.txt", "")
+    if reqs:
+        return {
+            "file": "requirements.txt",
+            "content": reqs,
+            "note": "requirements.txt is the dependency source",
+        }
+    return {"file": None, "content": "", "note": "No dependency file found"}
+
+
+def _extract_linting_tools(pyproject_content: str) -> dict[str, str]:
+    """Extract linting and formatting tools from pyproject.toml."""
+    tools: dict[str, str] = {}
+
+    if "[tool.ruff]" in pyproject_content:
+        tools["linter"] = "ruff"
+        tools["formatter"] = "ruff format"
+        for line in pyproject_content.splitlines():
+            if "line-length" in line and "=" in line:
+                tools["line_length"] = line.split("=")[-1].strip()
+            if line.strip().startswith("select") and "=" in line:
+                tools["rules"] = line.split("=")[-1].strip()
+
+    if "[tool.mypy]" in pyproject_content:
+        tools["type_checker"] = "mypy"
+
+    if not tools:
+        tools["note"] = "No linting tools configured"
+
+    return tools
 
 
 # ── LLM extractor ─────────────────────────────────────────────────────────────
