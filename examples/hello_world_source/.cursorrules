@@ -24,9 +24,9 @@ Source directories: .
 - Tests: tests
 
 ## Do not modify
-Not determinable from source — fill in agent-context.json static.restricted_write_paths
+- cost_report.json
 
 ## Domain concepts
-- Greeting: A recorded personalised message generated when the /greet/<name> endpoint is called, stored as a dict with 'name' and 'message' fields.
+- Greeting: A personalised message generated for a given name, stored as a dict with 'name' and 'message' fields.
+- Greetings Store: The in-memory list (_greetings) that accumulates every greeting created via the /greet/<name> endpoint.
 - Health Check: The /health endpoint that returns a simple status object indicating the service is running.
-- Service Info: The root endpoint response containing the service name and version string.

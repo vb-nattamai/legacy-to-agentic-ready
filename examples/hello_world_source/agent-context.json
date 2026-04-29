@@ -19,7 +19,7 @@
     ]
   },
   "dynamic": {
-    "last_scanned": "2026-04-29T10:58:13.258933+00:00",
+    "last_scanned": "2026-04-29T11:38:48.004268+00:00",
     "secondary_languages": [],
     "build_system": "pip",
     "build_command": "pip install -e '.[dev]' 2>/dev/null || pip install -r requirements.txt",
@@ -34,7 +34,7 @@
       "app": "app.py",
       "tests": "tests/"
     },
-    "architecture_summary": "A single-module Flask application that exposes four REST endpoints (index, health, greet, and greetings). All state is held in an in-memory list within the app module, with no external database or persistence layer. Tests exercise the API through Flask's test client.",
+    "architecture_summary": "A single-file Flask application that exposes four REST endpoints (index, health, greet, and greetings). All state is held in an in-memory list; there is no database or external dependency. Tests live in a dedicated tests/ directory and exercise the API through Flask's test client.",
     "key_components": [
       {
         "name": "app",
@@ -42,30 +42,30 @@
         "responsibility": "Defines the Flask application, all route handlers, and the in-memory greetings store."
       },
       {
-        "name": "tests",
+        "name": "test_app",
         "path": "tests/test_app.py",
-        "responsibility": "Contains API-level tests for the Flask application endpoints."
+        "responsibility": "Contains tests for the API endpoints."
       }
     ],
     "agent_safe_operations": [
       "Adding new GET/POST endpoints in app.py",
       "Adding new test files or test functions under tests/",
-      "Updating greeting message formatting logic",
-      "Adding new utility functions in separate modules",
-      "Updating dependencies in requirements.txt"
+      "Updating dependencies in requirements.txt and pyproject.toml",
+      "Refactoring greeting logic within app.py",
+      "Running pytest to validate changes"
     ],
     "agent_forbidden_operations": [
-      "Removing or renaming existing public endpoints (breaks API consumers)",
-      "Changing the in-memory _greetings data structure shape without updating all consumers and tests",
-      "Changing the default port or host binding without updating documentation",
-      "Deleting tests/__init__.py (needed for test discovery)"
+      "Removing or renaming existing public endpoints (/, /health, /greet/<name>, /greetings) without updating tests",
+      "Changing the _greetings in-memory store to a database without explicit instruction",
+      "Modifying cost_report.json",
+      "Changing the default port (5000) or host binding without explicit instruction"
     ],
     "potential_pitfalls": [
-      "The _greetings list is module-level global state; it persists across requests within a process but resets on restart, and tests may leak state between test functions if not isolated.",
-      "Flask's test client must be obtained via app.test_client(); importing app directly gives you the Flask instance, not a running server.",
-      "The app uses @app.get() shorthand (Flask 2.x+); older Flask versions will raise AttributeError.",
-      "No CORS headers are configured, so browser-based clients hitting the API will be blocked by default.",
-      "requirements.txt includes httpx but the app only uses Flask; httpx may be intended for integration tests \u2014 removing it could break test fixtures."
+      "The _greetings list is module-level global state; it persists across requests in a single process but resets on restart, and tests that don't isolate state will see cross-test pollution.",
+      "Flask's test client must be obtained via app.test_client(); importing app directly and using httpx against localhost requires the server to actually be running.",
+      "All routes use @app.get() shorthand (Flask 2.x+); using @app.route() with methods=['GET'] is equivalent but mixing styles can confuse linters.",
+      "There is no CORS, authentication, or input validation \u2014 adding middleware must be tested carefully to avoid breaking existing endpoint contracts.",
+      "pyproject.toml declares setuptools build backend but there is no setup.cfg or package directory, so 'pip install -e .' may fail without the requirements.txt fallback."
     ],
     "conventions": {
       "naming": "snake_case",

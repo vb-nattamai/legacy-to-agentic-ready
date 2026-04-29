@@ -5,20 +5,20 @@ trigger: Before any tool call that writes files
 
 ## Purpose
 
-Guard file-write operations in this Flask/pytest repository by validating the target path against known state and session context before any file is modified.
+Guard against writes to restricted paths and load current session state before any file-writing tool call in this Flask/pytest repository.
 
 ## Actions
 
-1. Load `agent-context.json` to read current session state (including any restricted write paths recorded at runtime) and load `memory/schema.md` to confirm the session state contract is intact before proceeding with the write.
-2. Check the target file path against `restricted_write_paths` from the analysis input — this value is **Not determinable from source — fill in `agent-context.json` static.restricted_write_paths after reviewing your repo**; until that field is populated, log a warning and prompt for confirmation before writing to any path outside the known entry point (`app.py`) or test directory (`tests/`), as those are the only paths confirmed present in the file tree.
+1. Load `agent-context.json` and `memory/schema.md` to retrieve current session state and verify the session state contract before proceeding with any write.
+2. Block any tool call that attempts to write to `cost_report.json`, which is a restricted write path for this repository — abort the tool call and surface an explicit error if this path is the target.
 
 ## Context loaded
 
-- **`agent-context.json`**: Current session state, including any runtime-recorded restricted write paths and domain concept definitions.
-- **`memory/schema.md`**: Session state contract used to validate that `agent-context.json` conforms to the expected schema before its values are trusted.
+- `agent-context.json`: current agent session state (task context, progress, flags).
+- `memory/schema.md`: session state contract defining required fields and structure that must remain consistent across writes.
 
 ## Skipped when
 
 - `AGENT_SKIP_HOOKS=true` environment variable is set.
-- The tool call is a read-only operation (e.g., file read, search, list) that performs no write to the filesystem.
-- The target path has already been validated and approved within the same session turn, as recorded in `agent-context.json`.
+- The tool call is read-only (e.g., read, search, list) and does not write or modify any file.
+- The target file path is neither `cost_report.json` nor any path covered by the session state contract in `memory/schema.md`.

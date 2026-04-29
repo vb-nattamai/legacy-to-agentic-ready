@@ -2,94 +2,82 @@
 
 # System Prompt: hello_world
 
-## Project Overview
-
-You are working on **hello_world**, a minimal Flask REST API that provides personalised greetings, records them in memory, and exposes health-check and listing endpoints. All state is held in an in-memory list within the app module; there is no external database or persistence layer.
+You are working on **hello_world**, a minimal Flask REST API that provides personalised greetings, records them in memory, and exposes health-check and listing endpoints.
 
 ---
 
 ## Tech Stack
 
-| Layer | Detail |
-|---|---|
-| Primary language | Python `>=3.11` |
-| Framework | Flask (2.x+), pytest |
-| Build system | pip |
-| Entry point | `app.py` |
+- **Primary language:** Python (>=3.11)
+- **Frameworks:** Flask (>=2.3), pytest
+- **Build system:** pip / pyproject.toml (setuptools backend)
+- **Linter/formatter:** ruff (rules: E, F, I — line length 88)
 
 ---
 
 ## Commands
 
 | Action | Command |
-|---|---|
-| Install | `pip install -r requirements.txt` |
-| Build / dev install | Detected as likely: `pip install -e .` — verify before use |
-| Run | `python app.py` |
-| Test | `pytest` |
+|--------|---------|
+| **Install** | `pip install -r requirements.txt` |
+| **Install (editable)** | detected as likely: `pip install -e .` — verify before use |
+| **Build** | `pip install -e '.[dev]' 2>/dev/null \|\| pip install -r requirements.txt` |
+| **Run** | `python app.py` |
+| **Test** | `pytest` |
+| **Lint** | `ruff check .` |
+| **Format** | `ruff format .` |
+
+> **Dependency management:** The authoritative source for project dependencies is the `[project].dependencies` list in `pyproject.toml`. Do not edit `requirements.txt` to add project dependencies.
 
 ---
 
-## Repository Layout
+## What You Must Never Touch
 
-Only the following paths are confirmed present in this repository:
-
-- `app.py` — Flask application, all route handlers, in-memory greetings store
-- `tests/test_app.py` — API-level tests via Flask's test client
-- `tests/` — test directory
-- `requirements.txt` — declared dependencies
-
----
-
-## Key Components
-
-**`app.py`**
-Defines the Flask application instance, all four route handlers (`/`, `/health`, `/greet/<name>`, `/greetings`), and the module-level `_greetings` list that acts as the in-memory store.
-
-**`tests/test_app.py`**
-Contains pytest-based API-level tests. Exercises all endpoints through Flask's built-in test client.
+- **`cost_report.json`** — this file is restricted. Do not read from, write to, or modify it under any circumstances.
+- Do not remove or rename any existing public endpoints (`/`, `/health`, `/greet/<name>`, `/greetings`) without simultaneously updating all affected tests.
+- Do not migrate the `_greetings` in-memory store to a database unless explicitly instructed.
+- Do not change the default port (5000) or host binding unless explicitly instructed.
 
 ---
 
 ## Domain Concepts
 
 | Term | Definition |
-|---|---|
-| **Greeting** | A recorded personalised message generated when `/greet/<name>` is called; stored as a dict with `name` and `message` fields. |
-| **Health Check** | The `/health` endpoint; returns a simple status object indicating the service is running. |
-| **Service Info** | The root `/` endpoint response; contains the service name and version string. |
+|------|-----------|
+| **Greeting** | A personalised message generated for a given name, stored as a dict with `name` and `message` fields. |
+| **Greetings Store** | The in-memory list (`_greetings`) that accumulates every greeting created via the `/greet/<name>` endpoint. |
+| **Health Check** | The `/health` endpoint that returns a simple status object indicating the service is running. |
+
+---
+
+## Key Components
+
+| Component | Path | Responsibility |
+|-----------|------|---------------|
+| `app` | `app.py` | Defines the Flask application, all route handlers, and the in-memory greetings store. |
+| `test_app` | `tests/test_app.py` | Contains tests for the API endpoints. |
 
 ---
 
 ## Coding Conventions
 
-- Naming convention: `snake_case` throughout
-- Structure type: single-package
-- Route handlers use the `@app.get()` shorthand (Flask 2.x+)
-- All new source files belong at the repo root or in `tests/`
-
----
-
-## What You Must Never Do
-
-- **Do not remove or rename existing public endpoints** — this breaks API consumers.
-- **Do not change the shape of the `_greetings` data structure** without updating every consumer and every test that reads from it.
-- **Do not change the default port or host binding** without also updating documentation.
-- **Do not delete `tests/__init__.py`** — it is required for test discovery.
-- **Restricted write paths:** Not determinable from source — fill in `agent-context.json` static.restricted_write_paths after reviewing your repo.
+- **Naming:** snake_case throughout.
+- **Structure:** single-package; all application code lives in `app.py` at the repository root.
+- **Routes:** use `@app.get()` shorthand (Flask 2.x+) consistently; do not mix with `@app.route()`.
+- **Tests:** live under `tests/`; use Flask's built-in test client.
 
 ---
 
 ## Safe Operations
 
-You may safely: add new GET/POST endpoints in `app.py`, add new test files or functions under `tests/`, update greeting message formatting logic, add new utility functions in separate modules, and update `requirements.txt`.
+You may: add new GET/POST endpoints in `app.py`, add new test files or functions under `tests/`, update dependencies in `requirements.txt` and `pyproject.toml`, refactor greeting logic within `app.py`, and run `pytest` to validate changes.
 
 ---
 
-## Pitfalls — Read Before Every Change
+## Pitfalls — Read Before Making Any Change
 
-1. The `_greetings` list is module-level global state; it persists across requests within a process but resets on restart, and tests may leak state between test functions if not isolated.
-2. Flask's test client must be obtained via `app.test_client()`; importing `app` directly gives you the Flask instance, not a running server.
-3. The app uses `@app.get()` shorthand (Flask 2.x+); older Flask versions will raise `AttributeError`.
-4. No CORS headers are configured, so browser-based clients hitting the API will be blocked by default.
-5. `requirements.txt` includes `httpx` but the app only uses Flask; `httpx` may be intended for integration tests — removing it could break test fixtures.
+1. The `_greetings` list is module-level global state; it persists across requests in a single process but resets on restart, and tests that don't isolate state will see cross-test pollution.
+2. Flask's test client must be obtained via `app.test_client()`; importing `app` directly and using `httpx` against localhost requires the server to actually be running.
+3. All routes use `@app.get()` shorthand (Flask 2.x+); using `@app.route()` with `methods=['GET']` is equivalent but mixing styles can confuse linters.
+4. There is no CORS, authentication, or input validation — adding middleware must be tested carefully to avoid breaking existing endpoint contracts.
+5. `pyproject.toml` declares a setuptools build backend but there is no `setup.cfg` or package directory, so `pip install -e .` may fail without the `requirements.txt` fallback.
