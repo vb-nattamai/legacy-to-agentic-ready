@@ -296,6 +296,136 @@ def _not_found() -> dict[str, Any]:
     return {"value": None, "source": None, "confidence": "not_found"}
 
 
+def _extract_linter(file_contents: dict[str, Any]) -> dict[str, Any]:
+    """Extract linter/formatter from config files. ruff takes priority."""
+    pyproject = file_contents.get("pyproject.toml", "")
+
+    if "[tool.ruff]" in pyproject:
+        rules = None
+        line_length = None
+        for line in pyproject.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("select") and "=" in stripped:
+                rules = stripped.split("=", 1)[-1].strip()
+            if stripped.startswith("line-length") and "=" in stripped:
+                line_length = stripped.split("=", 1)[-1].strip()
+        return {
+            "value": "ruff",
+            "source": "pyproject.toml [tool.ruff]",
+            "confidence": "high",
+            "details": {
+                "lint_command": "ruff check .",
+                "format_command": "ruff format .",
+                "rules": rules,
+                "line_length": line_length,
+            },
+        }
+
+    if ".ruff.toml" in file_contents:
+        return {
+            "value": "ruff",
+            "source": ".ruff.toml",
+            "confidence": "high",
+            "details": {"lint_command": "ruff check .", "format_command": "ruff format ."},
+        }
+
+    if ".flake8" in file_contents or "[flake8]" in pyproject:
+        return {
+            "value": "flake8",
+            "source": ".flake8 or pyproject.toml",
+            "confidence": "high",
+            "details": {},
+        }
+
+    if ".pylintrc" in file_contents or "[tool.pylint]" in pyproject:
+        return {
+            "value": "pylint",
+            "source": ".pylintrc or pyproject.toml",
+            "confidence": "high",
+            "details": {},
+        }
+
+    if "[tool.black]" in pyproject:
+        return {
+            "value": "black",
+            "source": "pyproject.toml [tool.black]",
+            "confidence": "high",
+            "details": {},
+        }
+
+    return {"value": None, "source": None, "confidence": "not_found", "details": {}}
+
+
+def _extract_dependency_manager(file_contents: dict[str, Any]) -> dict[str, Any]:
+    """Extract dependency management file. pyproject.toml [project] takes priority."""
+    pyproject = file_contents.get("pyproject.toml", "")
+
+    if "[project]" in pyproject:
+        deps: list[str] = []
+        in_deps = False
+        for line in pyproject.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("dependencies") and "=" in stripped:
+                # Handle inline single-line: dependencies = ["pkg>=1.0"]
+                after_eq = stripped.split("=", 1)[-1].strip()
+                if after_eq.startswith("[") and "]" in after_eq:
+                    import re
+
+                    deps = [m.strip() for m in re.findall(r'["\']([^"\']+)["\']', after_eq)]
+                    break
+                in_deps = True
+                continue
+            if in_deps:
+                if stripped.startswith("]"):
+                    break
+                if stripped.startswith('"') or stripped.startswith("'"):
+                    dep = stripped.strip('",').strip("',").strip()
+                    if dep:
+                        deps.append(dep)
+        return {
+            "value": "pyproject.toml",
+            "source": "pyproject.toml [project].dependencies",
+            "confidence": "high",
+            "details": {
+                "install_command": "pip install -e .",
+                "add_dependency_procedure": (
+                    "Add to dependencies list in [project] section of pyproject.toml"
+                ),
+                "do_not": (
+                    "Do not edit requirements.txt for project dependencies"
+                    " — it is not the authoritative source"
+                ),
+                "dependencies": deps,
+            },
+        }
+
+    if "[tool.poetry]" in pyproject and "[tool.poetry.dependencies]" in pyproject:
+        return {
+            "value": "pyproject.toml (poetry)",
+            "source": "pyproject.toml [tool.poetry.dependencies]",
+            "confidence": "high",
+            "details": {
+                "install_command": "poetry install",
+                "add_dependency_procedure": "Run: poetry add <package>",
+                "do_not": "Do not edit pyproject.toml manually when using poetry",
+            },
+        }
+
+    if "requirements.txt" in file_contents:
+        return {
+            "value": "requirements.txt",
+            "source": "requirements.txt",
+            "confidence": "high",
+            "details": {
+                "install_command": "pip install -r requirements.txt",
+                "add_dependency_procedure": "Add package to requirements.txt",
+                "do_not": "Do not use pip install without updating requirements.txt",
+            },
+        }
+
+    return {"value": None, "source": None, "confidence": "not_found", "details": {}}
+
+
 def extract_verified_facts(repo: dict[str, Any]) -> dict[str, Any]:
     """Mechanically extract verifiable facts from raw source files — no LLM.
 
@@ -426,6 +556,12 @@ def extract_verified_facts(repo: dict[str, Any]) -> dict[str, Any]:
         )
     else:
         facts["restricted_paths"] = _not_found()
+
+    # ── linter ────────────────────────────────────────────────────────────────
+    facts["linter"] = _extract_linter(all_files)
+
+    # ── dependency_manager ────────────────────────────────────────────────────
+    facts["dependency_manager"] = _extract_dependency_manager(all_files)
 
     return facts
 

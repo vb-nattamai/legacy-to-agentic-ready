@@ -188,3 +188,61 @@ def test_verified_facts_restricted_paths_from_gitignore():
     facts = extract_verified_facts(repo)
     assert facts["restricted_paths"]["confidence"] == "inferred"
     assert any("dist" in v for v in facts["restricted_paths"]["value"])
+
+
+def test_extract_verified_facts_detects_ruff_from_pyproject():
+    """ruff is detected from [tool.ruff] section in pyproject.toml."""
+    pyproject = (
+        "[tool.ruff]\nline-length = 88\ntarget-version = 'py311'\n\n"
+        '[tool.ruff.lint]\nselect = ["E", "F", "I"]\n'
+    )
+    repo = _make_repo(config_files={"pyproject.toml": pyproject})
+    facts = extract_verified_facts(repo)
+    assert facts["linter"]["value"] == "ruff"
+    assert facts["linter"]["confidence"] == "high"
+    assert facts["linter"]["details"]["lint_command"] == "ruff check ."
+    assert facts["linter"]["details"]["format_command"] == "ruff format ."
+
+
+def test_extract_verified_facts_no_linter_when_none_configured():
+    """Returns not_found when no linting tools are configured."""
+    repo = _make_repo(source_files={"app.py": "print('hello')"})
+    facts = extract_verified_facts(repo)
+    assert facts["linter"]["confidence"] == "not_found"
+    assert facts["linter"]["value"] is None
+
+
+def test_extract_verified_facts_pyproject_deps_take_priority():
+    """pyproject.toml [project].dependencies takes priority over requirements.txt."""
+    pyproject = "[project]\nname = 'hello_world'\ndependencies = [\n    \"flask>=2.3\",\n]\n"
+    repo = _make_repo(
+        config_files={
+            "pyproject.toml": pyproject,
+            "requirements.txt": "flask>=2.3\npytest>=7.0\n",
+        }
+    )
+    facts = extract_verified_facts(repo)
+    assert facts["dependency_manager"]["value"] == "pyproject.toml"
+    assert facts["dependency_manager"]["confidence"] == "high"
+    assert "pyproject.toml" in facts["dependency_manager"]["details"]["add_dependency_procedure"]
+    assert "flask>=2.3" in facts["dependency_manager"]["details"]["dependencies"]
+
+
+def test_extract_verified_facts_falls_back_to_requirements_txt():
+    """requirements.txt is used when pyproject.toml has no [project] section."""
+    repo = _make_repo(
+        config_files={
+            "pyproject.toml": "[build-system]\nrequires = ['setuptools']\n",
+            "requirements.txt": "flask>=2.3\n",
+        }
+    )
+    facts = extract_verified_facts(repo)
+    assert facts["dependency_manager"]["value"] == "requirements.txt"
+
+
+def test_extract_verified_facts_do_not_warns_about_requirements():
+    """When pyproject.toml is authoritative, do_not warns against requirements.txt."""
+    pyproject = "[project]\nname = 'x'\ndependencies = [\"flask>=2.3\"]\n"
+    repo = _make_repo(config_files={"pyproject.toml": pyproject})
+    facts = extract_verified_facts(repo)
+    assert "requirements.txt" in facts["dependency_manager"]["details"]["do_not"]
