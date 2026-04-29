@@ -563,7 +563,112 @@ def extract_verified_facts(repo: dict[str, Any]) -> dict[str, Any]:
     # ── dependency_manager ────────────────────────────────────────────────────
     facts["dependency_manager"] = _extract_dependency_manager(all_files)
 
+    # ── domain_concepts ───────────────────────────────────────────────────────
+    found_concepts = _extract_domain_concepts_from_source(source)
+    facts["domain_concepts"] = found_concepts if found_concepts else []
+
+    # ── secrets_present ───────────────────────────────────────────────────────
+    has_env = any(f in all_files for f in [".env", ".env.example", ".env.template", ".env.sample"])
+    facts["secrets_present"] = {
+        "value": has_env,
+        "source": ".env or .env.example" if has_env else "not found in file tree",
+        "confidence": "high",
+    }
+
     return facts
+
+
+def _extract_domain_concepts_from_source(
+    file_contents: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Mechanically extract domain concepts from Python source — no LLM."""
+    concepts: list[dict[str, Any]] = []
+    seen_terms: set[str] = set()
+
+    for fname, content in file_contents.items():
+        if not fname.endswith(".py"):
+            continue
+
+        lines = content.splitlines()
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+
+            # ── In-memory store: module-level list/dict assignment with a comment ──
+            if ("= []" in stripped or "= {}" in stripped) and not stripped.startswith("#"):
+                comment = ""
+                if "#" in stripped:
+                    comment = stripped.split("#", 1)[1].strip()
+                elif i > 0 and lines[i - 1].strip().startswith("#"):
+                    comment = lines[i - 1].strip().lstrip("# ").strip()
+
+                if comment:
+                    raw_name = stripped.split("=")[0].strip()
+                    # Strip type annotation if present (e.g. `_greetings: list[dict]`)
+                    var_name = raw_name.split(":")[0].strip().lstrip("_")
+                    term = var_name.replace("_", " ").title()
+                    if term not in seen_terms:
+                        seen_terms.add(term)
+                        concepts.append(
+                            {
+                                "term": term,
+                                "definition": comment,
+                                "source": f"{fname} line {i + 1}",
+                                "confidence": "high",
+                            }
+                        )
+
+            # ── Service Identity: root GET / handler returning service metadata ──
+            is_root_route = stripped in (
+                '@app.get("/")',
+                "@app.get('/')",
+                '@app.route("/")',
+                "@app.route('/')",
+                '@app.route("/", methods=["GET"])',
+            )
+            if is_root_route and "Service Identity" not in seen_terms:
+                # Scan forward for a return dict containing "service" key
+                for j in range(i + 1, min(i + 20, len(lines))):
+                    body = lines[j].strip()
+                    if '"service"' in body or "'service'" in body:
+                        seen_terms.add("Service Identity")
+                        # Try to pull docstring
+                        docstring = ""
+                        for k in range(i + 1, min(i + 6, len(lines))):
+                            dl = lines[k].strip()
+                            if dl.startswith('"""') or dl.startswith("'''"):
+                                docstring = dl.strip('"""').strip("'''").strip()
+                                break
+                        concepts.append(
+                            {
+                                "term": "Service Identity",
+                                "definition": docstring
+                                or "Root endpoint exposing service name and version metadata",
+                                "source": f"{fname} line {i + 1}",
+                                "confidence": "high",
+                            }
+                        )
+                        break
+
+            # ── Class definitions (non-test) ──────────────────────────────────
+            if stripped.startswith("class ") and ":" in stripped:
+                class_name = stripped[6:].split("(")[0].split(":")[0].strip()
+                if not class_name.startswith("Test") and class_name not in seen_terms:
+                    definition = f"Data class defined in {fname}"
+                    if i + 1 < len(lines):
+                        dl = lines[i + 1].strip()
+                        if dl.startswith('"""') or dl.startswith("'''"):
+                            definition = dl.strip('"""').strip("'''").strip()
+                    seen_terms.add(class_name)
+                    concepts.append(
+                        {
+                            "term": class_name,
+                            "definition": definition,
+                            "source": f"{fname} line {i + 1}",
+                            "confidence": "high",
+                        }
+                    )
+
+    return concepts
 
 
 def _llm_call(model: str, system: str, prompt: str, max_tokens: int = 4096) -> str:

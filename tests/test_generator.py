@@ -623,3 +623,34 @@ def test_reset_usage_clears_totals() -> None:
     assert report["calls"] == 0
     assert report["input_tokens"] == 0
     assert report["estimated_cost_usd"] == 0.0
+
+
+def test_safety_grounding_rules_include_no_secrets_rule() -> None:
+    """_GROUNDING_RULES must include the secrets not_found instruction."""
+    from agent_ready.generator import _GROUNDING_RULES
+
+    assert "secrets_present" in _GROUNDING_RULES
+    assert "No secrets handling mechanism is configured" in _GROUNDING_RULES
+
+
+def test_safety_grounding_rules_include_no_destructive_ops_rule() -> None:
+    """_GROUNDING_RULES must include the no irreversible operations instruction."""
+    from agent_ready.generator import _GROUNDING_RULES
+
+    assert "No irreversible operations are present" in _GROUNDING_RULES
+    assert "cost_report.json" in _GROUNDING_RULES
+
+
+def test_domain_grounding_rules_exclude_health_endpoints() -> None:
+    """_GROUNDING_RULES must explicitly exclude /health as a domain concept."""
+    from agent_ready.generator import _GROUNDING_RULES
+
+    assert "/health" in _GROUNDING_RULES
+    assert "infrastructure" in _GROUNDING_RULES
+
+
+def test_domain_grounding_rules_include_service_identity() -> None:
+    """_GROUNDING_RULES must mention Service Identity extraction from root endpoint."""
+    from agent_ready.generator import _GROUNDING_RULES
+
+    assert "Service Identity" in _GROUNDING_RULES

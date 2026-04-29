@@ -91,6 +91,33 @@ CRITICAL GROUNDING RULES — follow these before writing any fact:
    Do NOT infer which paths should be restricted from framework conventions.
 8. For directory structure: list ONLY directories and files present in the file_tree from the analysis input.
    Do NOT invent plausible directories (src/, tests/, docs/, etc.) that are not in the file_tree.
+9. For secrets and API key handling in safety sections:
+   Check verified_facts.secrets_present and environment_variables in the analysis input.
+   - If verified_facts.secrets_present.value is false AND environment_variables is empty:
+     write exactly: "No secrets handling mechanism is configured in this repository.
+     Establish one before adding any credentials."
+   - Do NOT recommend GitHub Secrets, python-dotenv, .env.example, or any other mechanism
+     unless it already appears in the source files or CI configuration.
+   - Do NOT describe CI/CD secrets practices when has_ci is false or no CI files are present.
+10. For destructive or irreversible operations in safety sections:
+    Check the analysis for file I/O, database access, external API calls, and irreversible state changes.
+    - If the codebase has no file I/O, no database, no external API calls, and only in-memory state:
+      write exactly: "No irreversible operations are present in this codebase. State changes are
+      ephemeral (in-memory only)."
+    - Do NOT list AgentReady-generated files (cost_report.json, AGENTS.md, CLAUDE.md, agent-context.json,
+      AGENTIC_EVAL.md) as dangerous or restricted. They are tooling artifacts, not source files.
+    - Do NOT invent test isolation risks, lockfile issues, or infrastructure monitoring concerns
+      unless they are explicitly present in the source code.
+11. For domain concepts sections:
+    - Use verified_facts.domain_concepts as the authoritative source if it is non-empty.
+    - /health, /status, /ping, /ready, /live endpoints are infrastructure probes — NEVER list
+      them as domain concepts.
+    - In-memory stores with code comments (e.g. "# intentionally simple, no database") ARE
+      domain concepts — always include them.
+    - Root GET / endpoints that return service name and version metadata represent "Service Identity"
+      — include this as a domain concept when present.
+    - If fewer than 3 domain concepts can be verified from source, list only those that are verified.
+      Do not invent a third concept to fill the list.
 
 Violating these rules produces context files that hallucinate facts and make AI agents less reliable, not more.
 The goal is grounded accuracy, not completeness.\

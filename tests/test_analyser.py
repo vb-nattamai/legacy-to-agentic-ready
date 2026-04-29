@@ -246,3 +246,70 @@ def test_extract_verified_facts_do_not_warns_about_requirements():
     repo = _make_repo(config_files={"pyproject.toml": pyproject})
     facts = extract_verified_facts(repo)
     assert "requirements.txt" in facts["dependency_manager"]["details"]["do_not"]
+
+
+def test_extract_domain_concepts_finds_in_memory_store():
+    """In-memory store with comment is extracted as a domain concept."""
+    source = {
+        "app.py": (
+            "# In-memory store — intentionally simple, no database\n_greetings: list[dict] = []\n"
+        )
+    }
+    repo = _make_repo(source_files=source)
+    facts = extract_verified_facts(repo)
+    concepts = facts.get("domain_concepts", [])
+    assert len(concepts) >= 1
+    greetings = next((c for c in concepts if "greet" in c["term"].lower()), None)
+    assert greetings is not None
+    assert greetings["confidence"] == "high"
+    assert "database" in greetings["definition"].lower()
+
+
+def test_extract_domain_concepts_finds_service_identity():
+    """Root GET / endpoint returning service metadata is extracted as Service Identity."""
+    source = {
+        "app.py": (
+            '@app.get("/")\n'
+            "def index():\n"
+            '    """Service root — returns name and version."""\n'
+            '    return jsonify({"service": "hello_world", "version": "0.1.0"})\n'
+        )
+    }
+    repo = _make_repo(source_files=source)
+    facts = extract_verified_facts(repo)
+    concepts = facts.get("domain_concepts", [])
+    service_id = next((c for c in concepts if c["term"] == "Service Identity"), None)
+    assert service_id is not None
+    assert service_id["confidence"] == "high"
+
+
+def test_extract_domain_concepts_ignores_health_endpoint():
+    """Health check endpoint is NOT extracted as a domain concept."""
+    source = {
+        "app.py": (
+            '@app.get("/health")\n'
+            "def health():\n"
+            '    """Health check endpoint."""\n'
+            "    return jsonify({'status': 'ok'})\n"
+        )
+    }
+    repo = _make_repo(source_files=source)
+    facts = extract_verified_facts(repo)
+    concepts = facts.get("domain_concepts", [])
+    health = next((c for c in concepts if "health" in c["term"].lower()), None)
+    assert health is None
+
+
+def test_secrets_present_false_when_no_env_files():
+    """secrets_present is false when no .env files exist."""
+    repo = _make_repo(source_files={"app.py": "print('hello')"})
+    facts = extract_verified_facts(repo)
+    assert facts["secrets_present"]["value"] is False
+    assert facts["secrets_present"]["confidence"] == "high"
+
+
+def test_secrets_present_true_when_env_example_exists():
+    """secrets_present is true when .env.example is present."""
+    repo = _make_repo(config_files={".env.example": "API_KEY=your-key-here\n"})
+    facts = extract_verified_facts(repo)
+    assert facts["secrets_present"]["value"] is True
