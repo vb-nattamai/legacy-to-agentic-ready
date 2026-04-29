@@ -147,18 +147,18 @@ Results from the hello_world example — a minimal Flask REST API with 4 endpoin
 
 | Category | Baseline | With Context | Improvement |
 |---|---|---|---|
-| **Overall** | 2.0 / 10 | **6.9 / 10** | +4.9 pts |
-| Commands | 2.8 / 10 | **7.9 / 10** | +5.1 pts |
-| Safety | 3.5 / 10 | **4.1 / 10** | +0.6 pts |
-| Architecture | 0.6 / 10 | **9.0 / 10** | +8.4 pts |
-| Domain | 0.0 / 10 | **6.8 / 10** | +6.8 pts |
-| Adversarial | 2.3 / 10 | **5.2 / 10** | +2.9 pts |
+| **Overall** | 1.8 / 10 | **7.1 / 10** | +5.3 pts |
+| Commands | 2.2 / 10 | **7.7 / 10** | +5.5 pts |
+| Safety | 3.2 / 10 | **5.1 / 10** | +1.9 pts |
+| Architecture | 1.2 / 10 | **8.6 / 10** | +7.4 pts |
+| Domain | 0.0 / 10 | **6.5 / 10** | +6.5 pts |
+| Adversarial | 1.3 / 10 | **6.9 / 10** | +5.6 pts |
 
-The most consistent signal is architecture, which moves from 0.6/10 to 9.0/10
+The most consistent signal is architecture, which moves from 1.2/10 to 8.6/10
 with a 100% pass rate on the hello_world reference repo. Entry point, language,
 framework, and directory structure are all correctly identified with context.
 
-Commands also shows strong improvement, moving from 2.8/10 to 7.9/10 with 80%
+Commands also shows strong improvement, moving from 2.2/10 to 7.7/10 with 60%
 pass rate. Build commands, install commands, and run commands are reliably extracted
 from Makefile and pyproject.toml.
 
