@@ -177,6 +177,15 @@ Both baseline and context responses use the same model, so scores reflect the im
 
 The evaluation report produced after each transformation identifies specifically which questions failed and what information was missing, providing an actionable improvement path rather than a single aggregate score.
 
+### Language support
+
+The evaluation golden set is currently optimised for Python repositories.
+Results on Python repos (Flask, FastAPI, Django) will be most accurate.
+
+For non-Python repos, the eval still runs and measures context improvement,
+but some questions (test framework configuration, packaging) may not map
+cleanly to the language. Java, Go, and TypeScript golden sets are planned.
+
 ### Evaluating existing context files
 
 The evaluation framework works on any repository — not just ones AgentReady transformed.
@@ -204,6 +213,12 @@ The recommended path is the one-click installer available in the AgentReady Acti
 3. Enter the target repository in `owner/repo` format and select an LLM provider
 4. The installer pushes a trigger workflow to the target repository, opens an issue, and applies the `agentic-ready` label
 5. The transformation runs automatically and opens a pull request with all generated files
+
+> **Cost notice:** A full transformation including evaluation makes approximately
+> 100-140 LLM calls. On Anthropic (default), expect $0.80-1.20 for a minimal repo
+> and $1.50-3.00 for a large multi-service repo. Use `--dry-run` to preview what
+> will be generated without making any API calls. Use `--eval false` to skip the
+> evaluation phase and reduce cost by approximately 60%.
 
 Review the pull request, fill in the `static` section of `agent-context.json` with project-specific details, and merge.
 
