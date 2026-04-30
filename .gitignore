@@ -15,3 +15,5 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+examples/hello_world_anthropic_tiered/
+examples/hello_world_openai_tiered/
